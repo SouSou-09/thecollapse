@@ -87,11 +87,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // v3エンジン使用時はコーデックを先に読み込む（復号に使う）
-    try { if (sessionStorage.getItem('tc_engine') === 'v3') _uv3(); } catch {}
+    try { if (enginePrefix() === '/service3/') _uv3(); } catch {}
 
     if (initialURL) {
       // エンジン（v1=/service/ / v3=/service3/）は保存時に使用したものに合わせる
-      const enginePrefixRestored = sessionStorage.getItem('tc_engine') === 'v3' ? '/service3/' : '/service/';
+      const enginePrefixRestored = enginePrefix();
       const fullURL = enginePrefixRestored + initialURL;
       // sessionStorage 経由の URL は __uv$config.encodeUrl 済みなので復号して
       // YouTube 動画再生 URL なら直接接続経路に流す。
@@ -1302,7 +1302,6 @@ function encodeForEngine(url) {
 window.setEngine = function(name) {
   try {
     localStorage.setItem('dev_engine', name === 'v3' ? 'v3' : 'v1');
-    sessionStorage.setItem('tc_engine', name === 'v3' ? 'v3' : 'v1');
     console.warn('[engine] ' + name + ' に切替。再読み込みで反映されます');
   } catch (e) {}
 };
