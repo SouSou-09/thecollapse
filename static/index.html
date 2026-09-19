@@ -698,7 +698,8 @@ const ENGINES = {
   bing:       { url: q => 'https://bing.com/search?q='+encodeURIComponent(q),       ph: 'Search Bing or type URL',       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="#0078D4"><path d="M5 2l4 1.4v13.8l4.6-2.6L9 12.4 13 6l6 8-7.5 4.3L5 20V2z"/></svg>` },
   duckduckgo: { url: q => 'https://duckduckgo.com/?q='+encodeURIComponent(q),       ph: 'Search DuckDuckGo or type URL', icon: `<svg width="20" height="20" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#DE5833"/><circle cx="50" cy="42" r="22" fill="white"/><circle cx="58" cy="36" r="5" fill="#333"/><circle cx="60" cy="35" r="2" fill="white"/><path d="M35 65 Q50 80 65 65" stroke="#333" stroke-width="3" fill="none" stroke-linecap="round"/></svg>` },
 };
-let current = TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google';
+function validEngine(e) { return (e && ENGINES[e]) ? e : 'google'; }
+let current = validEngine(TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google');
 applyEngine(current, false);
 
 function applyEngine(e, save=true) {
@@ -1075,7 +1076,7 @@ function initPWA() {
   loadVersionBadge();
   await TC_ACCOUNT.restoreSession();
   // v2.2.0修正: セッション復元前に適用すると既定値のままになるため、復元後に再適用する
-  current = TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google';
+  current = validEngine(TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google');
   applyEngine(current, false);
   renderAccountNav();
   applyBgFromAccount();
