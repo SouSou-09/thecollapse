@@ -2016,25 +2016,8 @@ const AD_CSS_SELECTOR = [
   // ポップアップ / 割り込み広告
   '[class*="popunder"]', '[id*="popunder"]', '[class*="interstitial"]', '[id*="interstitial"]',
   'amp-ad', 'amp-embed', 'amp-fx-flying-carpet',
-  // 既知の広告ドメインの iframe
-  'iframe[src*="doubleclick.net"]', 'iframe[src*="googlesyndication"]',
-  'iframe[src*="googleadservices"]', 'iframe[src*="adservice"]',
-  'iframe[src*="amazon-adsystem"]', 'iframe[src*="taboola"]', 'iframe[src*="outbrain"]',
-  'iframe[src*="adnxs"]', 'iframe[src*="criteo"]', 'iframe[src*="pubmatic"]',
-  'iframe[src*="mgid"]', 'iframe[src*="revcontent"]', 'iframe[src*="exoclick"]',
-  'iframe[src*="adsterra"]', 'iframe[src*="propellerads"]', 'iframe[src*="smartadserver"]',
-  'iframe[src*="openx"]', 'iframe[src*="teads"]', 'iframe[src*="media.net"]',
-  // アダルト系広告ネットワークの iframe（ExoClick / TrafficStars 等）
-  'iframe[src*="magsrv"]', 'iframe[src*="exdynsrv"]', 'iframe[src*="realsrv"]',
-  'iframe[src*="tsyndicate"]', 'iframe[src*="plugrush"]', 'iframe[src*="ero-advertising"]',
-  'iframe[src*="clickadu"]', 'iframe[src*="admaven"]', 'iframe[src*="dditscdn"]',
-  'iframe[src*="adcash"]', 'iframe[src*="aducdn"]',
-  // 広告らしい URL パス（CSS非表示方式なので誤爆しても表示が消えるだけ）
-  'iframe[src*="/ads/"]', 'img[src*="/ads/"]', 'script[src*="/ads/"]', 'link[href*="/ads/"]',
-  'img[src*="/ad."]', 'iframe[src*="/ad."]', 'script[src*="/ad."]',
-  'img[src*="/banners/"]', 'iframe[src*="/banners/"]',
-  'iframe[src*="popunder"]', 'script[src*="popunder"]', 'img[src*="popunder"]', '[href*="popunder"]',
-  '[src*="clickunder"]', '[href*="clickunder"]',
+  // URL根拠の判定（広告ドメイン・パス・アフィリエイトリンク）はJS側で復号して行う
+  // （プロキシがURLをエンコードするため属性セレクタでは一致しない）
   // 汎用の広告ラベル
   '[aria-label*="advertisement" i]', '[title*="advertisement" i]',
   // 広告コンテナで頻出するクラス・ID（アダルトサイトのウィジェット含む）
@@ -2045,9 +2028,7 @@ const AD_CSS_SELECTOR = [
   '[class*="preroll"]', '[id*="preroll"]',
   '[class*="overlay-ad"]', '[id*="overlay-ad"]',
   '[class*="sponsor"]', '[id*="sponsor"]',
-  // 広告リンク（アフィリエイト / adclick 等）— リンクごと非表示
-  'a[href*="adclick"]', 'a[href*="/ad/"]', 'a[href*="/ads/"]', 'a[href*="affiliate"]',
-  '[href*="affiliate"]', '[src*="affiliate"]',
+  // アフィリエイト等の広告リンクもJS側のURL判定で非表示にする
   // WordPress系まとめサイト（エロ漫画まとめ等）の広告コンテナ
   '[class*="ad-wrap"]', '[class*="ad-area"]', '[class*="ad-box"]', '[class*="ad-space"]',
   '[class*="ad-label"]', '[class*="adsense"]', '[id*="adsense"]', '[class*="my-ad"]',
