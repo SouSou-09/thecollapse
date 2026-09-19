@@ -2034,7 +2034,15 @@ const AD_CSS_SELECTOR = [
   '[class*="clickunder"]', '[id*="clickunder"]',
   '[class*="preroll"]', '[id*="preroll"]',
   '[class*="overlay-ad"]', '[id*="overlay-ad"]',
-  '[class*="sponsor"]', '[id*="sponsor"]'
+  '[class*="sponsor"]', '[id*="sponsor"]',
+  // 広告リンク（アフィリエイト / adclick 等）— リンクごと非表示
+  'a[href*="adclick"]', 'a[href*="/ad/"]', 'a[href*="/ads/"]', 'a[href*="affiliate"]',
+  '[href*="affiliate"]', '[src*="affiliate"]',
+  // WordPress系まとめサイト（エロ漫画まとめ等）の広告コンテナ
+  '[class*="ad-wrap"]', '[class*="ad-area"]', '[class*="ad-box"]', '[class*="ad-space"]',
+  '[class*="ad-label"]', '[class*="adsense"]', '[id*="adsense"]', '[class*="my-ad"]',
+  '[class*="post-ad"]', '[class*="article-ad"]', '[class*="entry-ad"]', '[class*="single-ad"]',
+  '[id*="ad-wrap"]', '[id*="ad-area"]', '[id*="ad-box"]'
 ].join(',');
 // 既知の広告配信ドメイン（URL一致はCSSの属性セレクタで行う）
 const AD_URL_DOMAINS = [
@@ -2048,7 +2056,9 @@ const AD_URL_DOMAINS = [
   'aducdn', 'onclickads', 'onclckds', 'adsupply', 'adsco.re', 'evaadm', 'evadav',
   'waframedia', 'smartadserver', 'openx.net', 'teads.tv', 'media.net', 'moatads',
   'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin', 'vungle', 'inmobi',
-  'startapp', 'adskeeper', 'dditscdn', 'badoink', 'stripcash'
+  'startapp', 'adskeeper', 'dditscdn', 'badoink', 'stripcash',
+  // 日本のまとめサイト系（裏広告 / 出会い系 / 広告リンク短縮）
+  'pcmax', 'happymail', 'wakuwaku', 'i2i.jp', 'zucks', 'adf.ly'
 ];
 const AD_URL_CSS = AD_URL_DOMAINS.map(d =>
   `iframe[src*="${d}"],img[src*="${d}"],script[src*="${d}"],link[href*="${d}"]`

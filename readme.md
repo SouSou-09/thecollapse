@@ -62,6 +62,7 @@ Newsの隣にSNSを追加しました。アップデート（デベロッパー�
 - サーバー再起動（Renderのスリープ復帰）やリロードでログアウトされる問題を修正（セッションを auth-data/sessions.json に永続化）
 - 広告ブロックβを改善：広告要素を削除せずCSSで非表示にする方式に変更（トグルOFFで即座に復元・動的に読み込まれる広告もブロック・正規スクリプトを誤って消してページが壊れる問題を解消）
 - 広告ブロックβの対象を拡充：エロ広告で主流のネットワーク（ExoClick系 exdynsrv/magsrv/realsrv、TrafficStars/tsyndicate、PlugRush、Ero-Advertising、ClickAdu、AdMaven、Adcash、ポップアンダー・バナー・スポンサー系セレクタ等）をブロック対象に追加
+- 広告ブロックβをさらに強化：まとめサイトで主流の裏広告（アフィリエイト・adclick・出会い系PCMAX/Happymail・i2i・adf.ly）のリンクごとのブロックと、WordPress系広告枠（ad-wrap/ad-area/adsense等）のコンテナブロックを追加
 - 設定の検索エンジンが正しく反映されない問題を修正
 - スマホ版のデザインを改善
 - 拡張機能が通常のページ移動（アドレスバー入力・検索）で適用されていなかった問題を修正
