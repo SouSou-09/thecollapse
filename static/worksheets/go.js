@@ -2007,3 +2007,39 @@ function updateAdblockBtn() {
 }
 window.toggleAdblock = toggleAdblock;
 updateAdblockBtn();
+
+// ======= SNS共有ボタン（v2.2.0） =======
+// 表示中のサイトをSNS(sns.html)に共有する。投稿機能自体は今後のアップデートで実装。
+function currentShareTarget() {
+  const frames = Array.from(document.querySelectorAll('iframe.browser-frame'));
+  return frames.find(f => f.offsetParent !== null) || frames[frames.length - 1] || null;
+}
+
+// プロキシ(/service/)経由のURLから元のURLをベストエフォートで復元する
+function prettySharedUrl(raw) {
+  if (!raw) return '';
+  try {
+    let u = raw;
+    const i = u.indexOf('/service/');
+    if (i >= 0) u = u.slice(i + '/service/'.length);
+    try { u = decodeURIComponent(u); } catch (e) {}
+    if (!/^https?:/i.test(u) && /^[A-Za-z0-9_-]{8,}={0,2}$/.test(u)) {
+      try { u = atob(u.replace(/-/g, '+').replace(/_/g, '/')); } catch (e) {}
+    }
+    return u;
+  } catch (e) { return raw; }
+}
+
+function shareToSNS() {
+  const f = currentShareTarget();
+  let raw = '', title = '';
+  if (f) {
+    try { raw = f.contentWindow.location.href; } catch (e) { raw = f.src || ''; }
+    try { title = (f.contentDocument && f.contentDocument.title) || ''; } catch (e) {}
+    if (!raw) raw = f.src || '';
+  }
+  const draft = { url: prettySharedUrl(raw), title: title || '', at: Date.now() };
+  try { localStorage.setItem('tc_sns_draft', JSON.stringify(draft)); } catch (e) {}
+  window.open('/worksheets/sns.html?share=1', '_blank');
+}
+window.shareToSNS = shareToSNS;
