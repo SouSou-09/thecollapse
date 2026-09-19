@@ -1991,7 +1991,7 @@ document.addEventListener('click', e => {
 // ======= 拡張機能: 広告ブロック（β / v2.2.0） =======
 // ON/OFFは下段ナビの拡張機能ボタン（パズル）→ 拡張機能一覧パネルで行う。
 // 仕組み: iframe 内に広告を隠すCSSを注入し、既知の広告配信ドメインの
-// iframe / img / script 要素を除去する（軽量実装・今後強化予定）。
+// iframe / img / script 要素を非表示にする（軽量実装・今後強化予定）。
 const ADBLOCK_KEY = 'ext_adblock';
 const AD_CSS_SELECTOR = [
   // AdSense / Google Publisher Tag
@@ -2018,7 +2018,19 @@ const AD_CSS_SELECTOR = [
   // 汎用の広告ラベル
   '[aria-label*="advertisement" i]', '[title*="advertisement" i]'
 ].join(',');
-const AD_URL_RE = /doubleclick\.net|googlesyndication|googleadservices|adservice|adsystem|amazon-adsystem|adnxs|adsafeprotected|adform|adroll|adsrvr|bidswitch|sharethrough|33across|criteo|taboola|outbrain|mgid|revcontent|propellerads|propellerclick|adsterra|exoclick|hilltopads|popads|popcash|trafficfactory|trafficjunky|juicyads|smartadserver|openx\.net|teads\.tv|(\.|\/\/|\?|&)media\.net|moatads|scorecardresearch|pubmatic|zedo|adcolony|applovin|vungle|inmobi|startapp|adskeeper|\/ads?(\/|\.|\?|#)/i;
+// 既知の広告配信ドメイン（URL一致はCSSの属性セレクタで行う）
+const AD_URL_DOMAINS = [
+  'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice', 'amazon-adsystem',
+  'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr', 'bidswitch', 'sharethrough',
+  '33across', 'criteo', 'taboola', 'outbrain', 'mgid', 'revcontent', 'propellerads',
+  'propellerclick', 'adsterra', 'exoclick', 'hilltopads', 'popads', 'popcash',
+  'trafficfactory', 'trafficjunky', 'juicyads', 'smartadserver', 'openx.net', 'teads.tv',
+  'media.net', 'moatads', 'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin',
+  'vungle', 'inmobi', 'startapp', 'adskeeper'
+];
+const AD_URL_CSS = AD_URL_DOMAINS.map(d =>
+  `iframe[src*="${d}"],img[src*="${d}"],script[src*="${d}"],link[href*="${d}"]`
+).join(',');
 
 function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
 
@@ -2030,13 +2042,14 @@ function applyAdblock(frame) {
     if (!doc.getElementById('tc-adblock-style')) {
       const st = doc.createElement('style');
       st.id = 'tc-adblock-style';
-      st.textContent = AD_CSS_SELECTOR + '{display:none!important;visibility:hidden!important;height:0!important;width:0!important;}';
+      // 広告要素は remove せず CSS のみで非表示にする。
+      // - トグルOFFでスタイルを外すだけで即復元できる（removeだと再読み込みまで欠けたまま）
+      // - スタイルタグが残り続けるため、後から動的に注入される広告も自動で非表示になる
+      // - 幅広いURL判定で正規の script まで消してページを壊す事故もなくなる
+      st.textContent = AD_CSS_SELECTOR + ',' + AD_URL_CSS +
+        '{display:none!important;visibility:hidden!important;height:0!important;width:0!important;}';
       (doc.head || doc.documentElement).appendChild(st);
     }
-    doc.querySelectorAll('iframe[src],img[src],script[src],link[href]').forEach(el => {
-      const u = el.getAttribute('src') || el.getAttribute('href') || '';
-      if (u && AD_URL_RE.test(u)) el.remove();
-    });
   } catch (e) { /* クロスオリジン等はβでは無視 */ }
 }
 
