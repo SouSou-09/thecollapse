@@ -86,23 +86,29 @@ window.addEventListener('DOMContentLoaded', async () => {
       try { console.warn('[go] loadTabsFromStorage timeout/fail:', e && e.message); } catch {}
     }
 
-    // v3エンジン使用時はコーデックを先に読み込む（復号に使う）
-    try { if (enginePrefix() === '/service3/') _uv3(); } catch {}
+    // 復号用にv3コーデックを読み込む（保存済みURLの符号方式の自動判定に使う）
+    try { await _uv3(); } catch {}
 
     if (initialURL) {
-      // エンジン（v1=/service/ / v3=/service3/）は保存時に使用したものに合わせる
-      const enginePrefixRestored = enginePrefix();
-      const fullURL = enginePrefixRestored + initialURL;
-      // sessionStorage 経由の URL は __uv$config.encodeUrl 済みなので復号して
-      // YouTube 動画再生 URL なら直接接続経路に流す。
+      // 保存済みURLの符号方式を自動判定する（エンジン切替の前後で古いタブが壊れないように）。
+      // base64として有効で http(s) に復号できれば v3(/service3/)、それ以外は従来(XOR)(/service/)。
+      let enginePrefixRestored = '/service/';
       let decodedInitial = null;
       try {
-        if (enginePrefixRestored === '/service3/' && window.UV3) {
-          decodedInitial = window.UV3.codec.base64.decode(initialURL);
-        } else if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl) {
-          decodedInitial = __uv$config.decodeUrl(initialURL);
+        if (window.UV3 && window.UV3.codec.base64) {
+          const d3 = window.UV3.codec.base64.decode(initialURL);
+          if (/^https?:\/\//i.test(d3)) { enginePrefixRestored = '/service3/'; decodedInitial = d3; }
         }
-      } catch {}
+      } catch (e) {}
+      if (!decodedInitial) {
+        try {
+          if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl) {
+            const d1 = __uv$config.decodeUrl(initialURL);
+            if (/^https?:\/\//i.test(d1)) decodedInitial = d1;
+          }
+        } catch (e) {}
+      }
+      const fullURL = enginePrefixRestored + initialURL;
 
       if (decodedInitial &&
           typeof TC_YT_EDU !== 'undefined' &&
@@ -698,9 +704,8 @@ function navigateTab(tabId, query) {
   if (typeof __uv$config === 'undefined') { return; }
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(reg => _waitForSWActive(reg))
-    .then(_uv3Ready).then(() => {
-      const encoded = encodeForEngine(url);
-      const proxyUrl = enginePrefix() + encoded;
+    .then(async () => {
+      const proxyUrl = await buildProxyUrl(url);
       const tab = tabs.find(t => t.id === tabId);
       if (!tab) return;
       const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
@@ -804,9 +809,8 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
 function fallbackToProxy(tabId, url) {
   if (typeof __uv$config === 'undefined') return;
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
-    .then(_uv3Ready).then(() => {
-      const encoded = encodeForEngine(url);
-      const proxyUrl = enginePrefix() + encoded;
+    .then(async () => {
+      const proxyUrl = await buildProxyUrl(url);
       const tab = tabs.find(t => t.id === tabId);
       if (!tab) return;
       const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
@@ -1298,6 +1302,18 @@ function encodeForEngine(url) {
     if (enginePrefix() === '/service3/' && window.UV3) return window.UV3.codec.base64.encode(url);
   } catch (e) {}
   return __uv$config.encodeUrl(url);
+}
+// URLからプロキシURLを構築する（エンジン設定に応じて符号方式も合わせる）。
+// v3コーデックが読み込めない場合は従来エンジン(/service/)で開くことで
+// 符号方式の不一致（atobエラー・Failed to load）を防ぐ。
+async function buildProxyUrl(url) {
+  if (enginePrefix() === '/service3/') {
+    const uv3 = await _uv3();
+    if (uv3 && uv3.codec && uv3.codec.base64) {
+      return '/service3/' + uv3.codec.base64.encode(url);
+    }
+  }
+  return '/service/' + __uv$config.encodeUrl(url);
 }
 window.setEngine = function(name) {
   try {
