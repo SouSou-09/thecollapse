@@ -432,9 +432,8 @@ function renderTabContent(tab) {
     // 電話番号ログインのポップアップがブロックされる。
     iframe.setAttribute('allow',
       'accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; ' +
-      'fullscreen; gyroscope; picture-in-picture; popups; popups-to-escape-sandbox; ' +
+      'fullscreen; gyroscope; picture-in-picture; ' +
       'web-share; publickey-credentials-get; screen-wake-lock');
-    iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('referrerpolicy', 'same-origin');
     iframe.onload = () => {
       scheduleExtensions(iframe);
@@ -733,9 +732,8 @@ function navigateTab(tabId, query) {
       // window.open によるポップアップ(X の OAuth ログイン等)を許可するための権限。
       iframe.setAttribute('allow',
         'accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; ' +
-        'fullscreen; gyroscope; picture-in-picture; popups; popups-to-escape-sandbox; ' +
+        'fullscreen; gyroscope; picture-in-picture; ' +
         'web-share; publickey-credentials-get; screen-wake-lock');
-      iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('referrerpolicy', 'same-origin');
       iframe.onload = () => {
         scheduleExtensions(iframe);
@@ -788,7 +786,6 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
   iframe.setAttribute('allow',
     'accelerometer; autoplay; clipboard-write; encrypted-media; ' +
     'gyroscope; picture-in-picture; web-share');
-  iframe.setAttribute('allowfullscreen', '');
   iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   iframe.onload = () => {
         scheduleExtensions(iframe);
@@ -837,9 +834,8 @@ function fallbackToProxy(tabId, url) {
       // window.open によるポップアップ(X の OAuth ログイン等)を許可するための権限。
       iframe.setAttribute('allow',
         'accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; ' +
-        'fullscreen; gyroscope; picture-in-picture; popups; popups-to-escape-sandbox; ' +
+        'fullscreen; gyroscope; picture-in-picture; ' +
         'web-share; publickey-credentials-get; screen-wake-lock');
-      iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('referrerpolicy', 'same-origin');
       iframe.onload = () => {
         scheduleExtensions(iframe);
