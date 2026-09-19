@@ -6,47 +6,57 @@
 <title>TheCollapse - SNS</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* SNS（v2.2.0 本格実装）
-     テーマ: TheCollapseのアップデート / TheCollapseへの改善案 / おすすめサイトの共有 */
+  /* SNS（v2.2.0 本格実装）— 背景はホームと同じ / デザインはX風 */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #000; color: #e7e9ea;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans JP", sans-serif;
-    min-height: 100vh; padding-top: 56px; padding-bottom: 90px;
+    background-color: var(--bg);
+    background-image: radial-gradient(circle, #1e2535 1.5px, transparent 1.5px);
+    background-size: 28px 28px;
+    color: #e7e9ea;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+    min-height: 100vh; padding-bottom: 90px;
   }
   a { color: inherit; text-decoration: none; }
+  /* X風のセンターカラム（ホームのドット背景が見える） */
+  .column {
+    max-width: 600px; margin: 0 auto;
+    padding-top: 56px; min-height: calc(100vh - 56px);
+    border-left: 1px solid #2f3336; border-right: 1px solid #2f3336;
+  }
   header {
     position: sticky; top: 56px; z-index: 10;
     display: flex; align-items: center; gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0,0,0,.85); backdrop-filter: blur(8px);
+    height: 53px; padding: 0 16px;
+    background: rgba(14,17,23,.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid #2f3336;
   }
   .sns-logo { width: 24px; height: 24px; flex: none; }
   .title { font-size: 18px; font-weight: 800; }
   .beta { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: #1d9bf0; border-radius: 999px; padding: 3px 10px; }
-  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 107px; background: #000; z-index: 9; }
-  .tab { flex: 1; text-align: center; padding: 14px 0; font-weight: 700; font-size: 14px; color: #71767b; cursor: pointer; position: relative; }
+  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 109px; background: rgba(14,17,23,.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 9; }
+  .tab { flex: 1; text-align: center; padding: 14px 0; font-weight: 700; font-size: 14px; color: #71767b; cursor: pointer; position: relative; user-select: none; transition: background .12s; }
   .tab.active { color: #e7e9ea; }
   .tab.active::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 56px; height: 4px; border-radius: 999px; background: #1d9bf0; }
-  .tab:hover { color: #e7e9ea; }
-  .notice { margin: 14px 16px 0; padding: 13px 16px; border: 1px solid #2f3336; border-radius: 16px; font-size: 13px; color: #71767b; line-height: 1.6; }
-  .notice strong { color: #e7e9ea; }
-  /* 投稿フォーム */
-  .composer { margin: 14px 16px 0; border: 1px solid #2f3336; border-radius: 16px; padding: 14px 16px; }
+  .tab:hover { color: #e7e9ea; background: rgba(231,233,234,.04); }
+  /* X風の情報バナー */
+  .notice { padding: 12px 16px; border-bottom: 1px solid #2f3336; font-size: 13px; color: #71767b; line-height: 1.6; background: rgba(29,155,240,.07); }
+  .notice strong { color: #e7e9ea; margin-right: 8px; }
+  /* 投稿フォーム（X風のフラット欄） */
+  .composer { padding: 12px 16px; border-bottom: 1px solid #2f3336; }
   .composer h2 { font-size: 15px; margin-bottom: 10px; }
-  .c-select { background: #16181c; border: 1px solid #2f3336; color: #e7e9ea; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 13px; outline: none; cursor: pointer; }
-  .composer textarea { width: 100%; background: transparent; border: 0; color: #e7e9ea; font: inherit; font-size: 15px; line-height: 1.5; min-height: 84px; resize: vertical; margin-top: 10px; outline: none; }
+  .c-select { background: #16181c; border: 1px solid #2f3336; color: #e7e9ea; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 13px; outline: none; cursor: pointer; font-family: inherit; }
+  .composer textarea { width: 100%; background: transparent; border: 0; color: #e7e9ea; font: inherit; font-size: 19px; line-height: 1.45; min-height: 72px; resize: vertical; margin-top: 10px; outline: none; }
   .composer textarea::placeholder { color: #71767b; }
   .c-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
   .c-hint { font-size: 12px; color: #71767b; line-height: 1.5; }
   .c-err { font-size: 12px; color: #f4212e; margin-top: 6px; min-height: 15px; }
-  .post-btn { background: #1d9bf0; color: #fff; border: 0; border-radius: 999px; padding: 8px 18px; font-weight: 800; font-size: 14px; cursor: pointer; }
+  .post-btn { background: #1d9bf0; color: #fff; border: 0; border-radius: 999px; padding: 8px 20px; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; transition: background .15s; }
+  .post-btn:hover { background: #1a8cd8; }
   .post-btn:disabled { opacity: .5; cursor: default; }
-  /* 投稿 */
-  .post { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2f3336; transition: background .12s; }
-  .post:hover { background: rgba(255,255,255,.03); }
-  .avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
+  /* タイムライン（X風のフラット行 + ホバー） */
+  .post { display: flex; gap: 12px; padding: 12px 16px 10px; border-bottom: 1px solid #2f3336; transition: background .12s; }
+  .post:hover { background: rgba(231,233,234,.03); }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; color: #fff; }
   .p-body { flex: 1; min-width: 0; }
   .p-head { display: flex; align-items: center; gap: 6px; font-size: 14px; flex-wrap: wrap; }
   .p-name { font-weight: 800; } .p-sid, .p-time { color: #71767b; }
@@ -54,20 +64,21 @@
   .tag-update { background: rgba(29,155,240,.15); color: #1d9bf0; }
   .tag-idea { background: rgba(120,86,255,.15); color: #a08cff; }
   .tag-site { background: rgba(0,186,124,.15); color: #2ad3a5; }
-  .p-text { font-size: 15px; line-height: 1.55; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
-  /* おすすめサイトのリンクカード */
-  .linkcard { margin-top: 10px; border: 1px solid #2f3336; border-radius: 14px; overflow: hidden; display: block; }
-  .linkcard:hover { border-color: #3d4348; }
+  .p-text { font-size: 15px; line-height: 1.55; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+  /* おすすめサイトのリンクカード（Xのリンクカード風） */
+  .linkcard { margin-top: 12px; border: 1px solid #2f3336; border-radius: 16px; overflow: hidden; display: block; transition: background .15s; }
+  .linkcard:hover { background: rgba(231,233,234,.04); }
   .linkcard-thumb { height: 92px; background: linear-gradient(135deg, #1d9bf0 0%, #7856ff 100%); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; letter-spacing: .04em; }
   .linkcard-body { padding: 10px 12px; font-size: 13px; }
   .linkcard-title { font-weight: 700; }
   .linkcard-url { color: #71767b; font-size: 12px; margin-top: 2px; word-break: break-all; }
-  /* アクション（いいね / 返信 / 削除） */
-  .p-actions { display: flex; gap: 2px; margin-top: 8px; max-width: 400px; justify-content: space-between; }
-  .p-act { display: flex; align-items: center; gap: 6px; background: none; border: 0; color: #71767b; font-size: 13px; cursor: pointer; padding: 6px 10px; border-radius: 999px; font-family: inherit; }
+  /* アクション（Xのホバーカラー: 返信=青 / いいね=ピンク / 削除=赤） */
+  .p-actions { display: flex; gap: 2px; margin-top: 6px; max-width: 425px; justify-content: space-between; }
+  .p-act { display: flex; align-items: center; gap: 6px; background: none; border: 0; color: #71767b; font-size: 13px; cursor: pointer; padding: 6px 10px; border-radius: 999px; font-family: inherit; transition: background .12s, color .12s; }
   .p-act:hover { background: rgba(29,155,240,.1); color: #1d9bf0; }
-  .p-act.liked { color: #f4212e; }
-  .p-act.liked svg { fill: #f4212e; }
+  .p-act.like:hover { background: rgba(249,24,128,.1); color: #f91880; }
+  .p-act.liked { color: #f91880; }
+  .p-act.liked svg { fill: #f91880; }
   .p-act.del:hover { background: rgba(244,33,46,.1); color: #f4212e; }
   /* 返信 */
   .replies { margin-top: 8px; border-top: 1px solid #2f3336; padding-top: 8px; display: none; }
@@ -82,7 +93,8 @@
   .r-form { display: flex; gap: 8px; margin-top: 8px; }
   .r-form input { flex: 1; background: #16181c; border: 1px solid #2f3336; border-radius: 999px; color: #e7e9ea; padding: 8px 14px; font: inherit; font-size: 14px; outline: none; }
   .r-form input:focus { border-color: #1d9bf0; }
-  .r-send { background: #1d9bf0; border: 0; color: #fff; border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .r-send { background: #1d9bf0; border: 0; color: #fff; border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; font-size: 13px; font-family: inherit; transition: background .15s; }
+  .r-send:hover { background: #1a8cd8; }
   .r-send:disabled { opacity: .5; cursor: default; }
   /* 共有プレビュー（Browserの共有ボタンから来たとき） */
   .composer .shared-card { display: flex; gap: 10px; border: 1px solid #2f3336; border-radius: 12px; padding: 10px 12px; }
@@ -91,17 +103,18 @@
   .composer .sc-url { font-size: 12px; color: #71767b; word-break: break-all; margin-top: 2px; }
   .composer .actions { display: flex; justify-content: flex-end; margin-top: 12px; }
   .shared-ok { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #2ad3a5; font-weight: 700; }
-  /* 状態表示 */
-  .tab-empty { margin: 14px 16px 0; padding: 22px 16px; text-align: center; color: #71767b; font-size: 14px; border: 1px dashed #2f3336; border-radius: 16px; display: none; }
-  .login-notice { margin: 14px 16px 0; padding: 18px 16px; border: 1px solid #2f3336; border-radius: 16px; text-align: center; font-size: 14px; line-height: 1.7; color: #71767b; }
+  /* 状態表示（X風フラット） */
+  .tab-empty { padding: 44px 16px; text-align: center; color: #71767b; font-size: 14px; display: none; }
+  .login-notice { padding: 24px 16px; border-bottom: 1px solid #2f3336; text-align: center; font-size: 14px; line-height: 1.7; color: #71767b; }
   .login-notice a { color: #1d9bf0; font-weight: 700; }
-  /* 右下の投稿ボタン（X風フローティング） */
+  /* 右下の投稿ボタン（Xモバイル風フローティング） */
   .fab {
     position: fixed; right: 20px; bottom: 24px;
     width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
     background: #1d9bf0; color: #fff; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 16px rgba(29,155,240,.4); z-index: 20;
+    box-shadow: 0 4px 16px rgba(29,155,240,.4); z-index: 20; transition: background .15s;
   }
+  .fab:hover { background: #1a8cd8; }
   footer { padding: 18px 16px 10px; text-align: center; font-size: 13px; color: #71767b; }
   footer a { color: #1d9bf0; }
 
@@ -213,6 +226,7 @@
   </div>
 </nav>
 
+<div class="column">
 
   <header>
     <svg class="sns-logo" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#e7e9ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
@@ -282,6 +296,8 @@
   </button>
 
   <footer><a href="../index.html">← ホームに戻る</a></footer>
+
+</div>
 
 <script src="/worksheets/account.js"></script>
 <script>
@@ -393,7 +409,7 @@
     var liked = CURRENT_USER && p.likes && p.likes.indexOf(CURRENT_USER) >= 0;
 
     var likeBtn = document.createElement('button');
-    likeBtn.className = 'p-act' + (liked ? ' liked' : '');
+    likeBtn.className = 'p-act like' + (liked ? ' liked' : '');
     likeBtn.innerHTML = ICONS.heart;
     likeBtn.appendChild(document.createTextNode(String((p.likes || []).length)));
     likeBtn.addEventListener('click', function () { toggleLike(p, likeBtn); });
