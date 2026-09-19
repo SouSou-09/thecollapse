@@ -319,27 +319,6 @@ nav {
 </style>
 </head>
 <body>
-<div style="margin:16px 0;padding:12px;border:1px solid rgba(128,128,128,.35);border-radius:10px;">
-  <div style="font-weight:700;margin-bottom:6px;">プロキシエンジン（試験運用）</div>
-  <label style="display:block;margin:4px 0;"><input type="radio" name="uvengine" value="v1"> 従来（Ultraviolet 1.0）— 既定</label>
-  <label style="display:block;margin:4px 0;"><input type="radio" name="uvengine" value="v3"> 新式（Ultraviolet 3.2・試験中）</label>
-  <div style="font-size:11px;opacity:.65;margin-top:4px;">変更は再読み込み後に反映。サイトが表示されなくなった場合は「従来」に戻してください。</div>
-</div>
-<script>
-(function(){
-  var KEY = 'dev_engine';
-  var r1 = document.querySelector('input[name="uvengine"][value="v1"]');
-  var r2 = document.querySelector('input[name="uvengine"][value="v3"]');
-  var cur = 'v1';
-  try { cur = localStorage.getItem(KEY) === 'v3' ? 'v3' : 'v1'; } catch (e) {}
-  if (r1 && r2) { (cur === 'v3' ? r2 : r1).checked = true; }
-  function save(){ try { localStorage.setItem(KEY, (r2 && r2.checked) ? 'v3' : 'v1'); } catch (e) {} }
-  if (r1) r1.addEventListener('change', save);
-  if (r2) r2.addEventListener('change', save);
-})();
-</script>
-
-
 <!-- ナビ -->
 <nav>
   <div class="nav-left">
@@ -383,6 +362,10 @@ nav {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       ページ離脱確認
     </div>
+    <div class="nav-item" onclick="showSection('uv', this)" id="nav-uv">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Ultraviolet
+    </div>
     <div class="nav-item" onclick="showSection('search', this)" id="nav-search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       検索エンジン
@@ -423,6 +406,22 @@ nav {
         </label>
       </div>
     </div>
+<div id="section-uv" class="section" style="display:none;">
+  <div class="section-title">Ultraviolet</div>
+  <div class="setting-card">
+    <div class="setting-info">
+      <div class="setting-label">プロキシエンジン</div>
+      <div class="setting-desc">サイトが読み込めない・表示されない場合に、プロキシの互換エンジンを切り替えます（試験運用）。変更は再読み込み後に反映されます。表示できなくなった場合は「従来」に戻してください。</div>
+    </div>
+    <div class="setting-control">
+      <select class="styled-select" id="uv-engine-select">
+        <option value="v1">従来（Ultraviolet 1.0）</option>
+        <option value="v3">新式（Ultraviolet 3.2・試験中）</option>
+      </select>
+    </div>
+  </div>
+</div>
+
 
     <!-- 検索エンジン -->
     <div id="section-search" class="section" style="display:none">
@@ -883,6 +882,17 @@ async function saveNPrefs() {
   var el=document.getElementById("version-badge");
   if(!el)return;
   try{ var res=await fetch("/api/version",{cache:"no-store"}); var data=await res.json(); if(data&&data.version)el.textContent=data.version; }catch(e){}
+})();
+</script>
+<script>
+(function(){
+  var sel = document.getElementById('uv-engine-select');
+  if (!sel) return;
+  try { sel.value = localStorage.getItem('dev_engine') === 'v3' ? 'v3' : 'v1'; } catch (e) { sel.value = 'v1'; }
+  sel.addEventListener('change', function(){
+    try { localStorage.setItem('dev_engine', sel.value); } catch (e) {}
+    if (typeof showToast === 'function') showToast('保存しました（再読み込みで反映されます）');
+  });
 })();
 </script>
 </body>
