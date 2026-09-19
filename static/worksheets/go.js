@@ -86,13 +86,20 @@ window.addEventListener('DOMContentLoaded', async () => {
       try { console.warn('[go] loadTabsFromStorage timeout/fail:', e && e.message); } catch {}
     }
 
+    // v3エンジン使用時はコーデックを先に読み込む（復号に使う）
+    try { if (sessionStorage.getItem('tc_engine') === 'v3') _uv3(); } catch {}
+
     if (initialURL) {
-      const fullURL = '/service/' + initialURL;
+      // エンジン（v1=/service/ / v3=/service3/）は保存時に使用したものに合わせる
+      const enginePrefixRestored = sessionStorage.getItem('tc_engine') === 'v3' ? '/service3/' : '/service/';
+      const fullURL = enginePrefixRestored + initialURL;
       // sessionStorage 経由の URL は __uv$config.encodeUrl 済みなので復号して
       // YouTube 動画再生 URL なら直接接続経路に流す。
       let decodedInitial = null;
       try {
-        if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl) {
+        if (enginePrefixRestored === '/service3/' && window.UV3) {
+          decodedInitial = window.UV3.codec.base64.decode(initialURL);
+        } else if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl) {
           decodedInitial = __uv$config.decodeUrl(initialURL);
         }
       } catch {}
@@ -466,6 +473,9 @@ function onFrameLoad(tabId, iframe) {
 function decodeProxyUrl(src) {
   if (!src) return '';
   try {
+    if (src.indexOf('/service3/') === 0 && window.UV3) {
+      try { return window.UV3.codec.base64.decode(src.slice('/service3/'.length)); } catch (e) {}
+    }
     if (src.includes('/service/') && typeof __uv$config !== 'undefined') {
       const encoded = src.split('/service/')[1];
       return __uv$config.decodeUrl ? __uv$config.decodeUrl(encoded) : encoded;
@@ -686,11 +696,11 @@ function navigateTab(tabId, query) {
   // どのサイトもアプリ内（ブラウザモード）のタブで開く。
   // 新しいブラウザタブや about:blank のウィンドウは開かない。
   if (typeof __uv$config === 'undefined') { return; }
-  window.navigator.serviceWorker.register('/sw.js', { scope: __uv$config.prefix })
+  window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(reg => _waitForSWActive(reg))
-    .then(() => {
-      const encoded = __uv$config.encodeUrl(url);
-      const proxyUrl = '/service/' + encoded;
+    .then(_uv3Ready).then(() => {
+      const encoded = encodeForEngine(url);
+      const proxyUrl = enginePrefix() + encoded;
       const tab = tabs.find(t => t.id === tabId);
       if (!tab) return;
       const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
@@ -793,10 +803,10 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
 // プロキシ経由ロードへのフォールバック
 function fallbackToProxy(tabId, url) {
   if (typeof __uv$config === 'undefined') return;
-  window.navigator.serviceWorker.register('/sw.js', { scope: __uv$config.prefix })
-    .then(() => {
-      const encoded = __uv$config.encodeUrl(url);
-      const proxyUrl = '/service/' + encoded;
+  window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
+    .then(_uv3Ready).then(() => {
+      const encoded = encodeForEngine(url);
+      const proxyUrl = enginePrefix() + encoded;
       const tab = tabs.find(t => t.id === tabId);
       if (!tab) return;
       const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
@@ -1251,6 +1261,51 @@ async function loadTabsFromStorage() {
     }
   } catch {}
 }
+
+// ======= プロキシエンジン切替（開発用・未リリース: TheCollapse V3 移行作業用） =======
+// v1 = /service/（Ultraviolet 1.0.11・現行） / v3 = /service3/（Ultraviolet 3.2.10・並行導入）
+// 使い方: コンソールで setEngine('v3')（戻すときは setEngine('v1')）→ 再読み込みで反映
+function enginePrefix() {
+  try { return localStorage.getItem('dev_engine') === 'v3' ? '/service3/' : '/service/'; }
+  catch (e) { return '/service/'; }
+}
+function engineSWUrl() {
+  return enginePrefix() === '/service3/' ? '/uv3/sw.js' : '/sw.js';
+}
+let _uv3Promise = null;
+function _uv3() {
+  if (window.UV3) return Promise.resolve(window.UV3);
+  if (!_uv3Promise) {
+    _uv3Promise = new Promise(resolve => {
+      const s = document.createElement('script');
+      s.src = '/uv3/uv.bundle.js';
+      s.onload = () => {
+        window.UV3 = window.Ultraviolet;
+        try { delete window.Ultraviolet; } catch (e) {}
+        resolve(window.UV3);
+      };
+      s.onerror = () => resolve(null);
+      document.head.appendChild(s);
+    });
+  }
+  return _uv3Promise;
+}
+function _uv3Ready() {
+  return enginePrefix() === '/service3/' ? _uv3() : Promise.resolve();
+}
+function encodeForEngine(url) {
+  try {
+    if (enginePrefix() === '/service3/' && window.UV3) return window.UV3.codec.base64.encode(url);
+  } catch (e) {}
+  return __uv$config.encodeUrl(url);
+}
+window.setEngine = function(name) {
+  try {
+    localStorage.setItem('dev_engine', name === 'v3' ? 'v3' : 'v1');
+    sessionStorage.setItem('tc_engine', name === 'v3' ? 'v3' : 'v1');
+    console.warn('[engine] ' + name + ' に切替。再読み込みで反映されます');
+  } catch (e) {}
+};
 
 // ======= その他メニュー =======
 function toggleMoreOptions() {
@@ -2054,13 +2109,13 @@ const AD_URL_DOMAINS = [
 function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
 
 // 属性値を復号して広告ドメインと照合する（生の値も両方見る）
-function _adIsAdUrl(u) {
+function _adIsAdUrl(u, cfg) {
   if (!u) return false;
   let dec = null;
   try {
-    const prefix = (typeof __uv$config !== 'undefined' && __uv$config.prefix) || '/service/';
-    if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl && String(u).indexOf(prefix) === 0) {
-      dec = String(__uv$config.decodeUrl(String(u).slice(prefix.length)) || '');
+    const prefix = (cfg && cfg.prefix) || '/service/';
+    if (cfg && cfg.decodeUrl && String(u).indexOf(prefix) === 0) {
+      dec = String(cfg.decodeUrl(String(u).slice(prefix.length)) || '');
     }
   } catch (e) {}
   const raw = String(u).toLowerCase();
@@ -2076,6 +2131,9 @@ function _adIsAdUrl(u) {
 // 非表示にした要素はスタイルタグに記録し、トグルOFFで復元できるようにする。
 function _adScanDoc(doc, st) {
   const hidden = st.__hidden;
+  // フレーム側に __uv$config があればそちらを優先（v3エンジンのフレームでは復号方式が異なる）
+  const cfg = (doc.defaultView && doc.defaultView.__uv$config) ||
+    (typeof __uv$config !== 'undefined' ? __uv$config : null);
   const els = doc.querySelectorAll('iframe,img,embed,object,video,source,script,link,a');
   for (let i = 0; i < els.length; i++) {
     const el = els[i];
@@ -2084,7 +2142,7 @@ function _adScanDoc(doc, st) {
     const attrs = ['src', 'href', 'data-src'];
     for (let j = 0; j < attrs.length; j++) {
       const v = el.getAttribute(attrs[j]);
-      if (v && _adIsAdUrl(v)) { hit = true; break; }
+      if (v && _adIsAdUrl(v, cfg)) { hit = true; break; }
     }
     if (!hit) continue;
     hidden.push({ el: el, prev: (el.style && el.style.display) || '' });

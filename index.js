@@ -13,6 +13,9 @@ import { attachAuthRoutes, getSessionUser } from "./auth.js";
 import { attachSnsRoutes } from "./sns.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
+// v1（現行エンジン）のdist退避先と、v3用カスタムconfigの場所
+const uv1Path = fileURLToPath(new URL("./static/uv1/", import.meta.url));
+const uv3CustomPath = fileURLToPath(new URL("./static/uv3/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
 const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
 const bare = createBareServer("/bare/", {});
@@ -161,8 +164,17 @@ app.get("/api/version", async (req, res) => {
 });
 
 app.use(express.static(publicPath));
-app.use("/worksheets/uv/", express.static(uvPath));
-app.use("/uv/", express.static(uvPath));
+app.use("/worksheets/uv/", express.static(uv1Path));
+app.use("/uv/", express.static(uv1Path));
+
+// TheCollapse V3（開発用・未リリース）: Ultraviolet v3 を /service3/ に並行導入。
+// 既存の /service/（v1.0.11・static/uv1 に退避済み）は一切変更しない。
+app.get("/uv3/sw.js", (req, res) => {
+  res.setHeader("Service-Worker-Allowed", "/service3/");
+  res.sendFile(uvPath + "/sw.js");
+});
+app.use("/uv3/", express.static(uv3CustomPath));
+app.use("/uv3/", express.static(uvPath));
 
 /* ── 簡易レートリミッタ (PUT /worksheets/data/:filename) ── */
 // 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の書き込み回数を制限する。
