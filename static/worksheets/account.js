@@ -12,7 +12,7 @@
 
 const TC_ACCOUNT = (() => {
   // ---- 開発者アカウント（デベロッパータグを表示する専用ユーザー） ----
-  const TC_DEV_USERS = ['Sou930'];
+  const TC_DEV_USERS = ['sousou09'];
 
   // ---- 内部状態 ----
   // _current は { username, icon, bg, createdAt, admin } など公開情報のみ。
