@@ -409,6 +409,9 @@ function renderTabContent(tab) {
     iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('referrerpolicy', 'same-origin');
     iframe.onload = () => {
+      applyAdblock(iframe);
+      setTimeout(() => applyAdblock(iframe), 1500);
+      setTimeout(() => applyAdblock(iframe), 4000);
       onFrameLoad(tab.id, iframe);
       // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
       attachFrameTracker(tab.id, iframe);
@@ -1950,3 +1953,57 @@ document.addEventListener('click', e => {
     menu.style.display = 'none';
   }
 });
+// ======= 拡張機能: 広告ブロック（β / v2.2.0） =======
+// Browserモードの下段ナビ（ブックマーク追加の左）の盾ボタンでON/OFFする。
+// 仕組み: iframe 内に広告を隠すCSSを注入し、既知の広告配信ドメインの
+// iframe / img / script 要素を除去する（軽量実装・今後強化予定）。
+const ADBLOCK_KEY = 'ext_adblock';
+const AD_CSS_SELECTOR = [
+  'ins.adsbygoogle',
+  '[id^="google_ads"]', '[id^="div-gpt-ad"]', '[id^="aswift"]',
+  '[class*="adsbygoogle"]', '[class*="advert"]', '[class*="AdSlot"]',
+  'iframe[src*="doubleclick.net"]', 'iframe[src*="googlesyndication"]',
+  'iframe[src*="googleadservices"]', 'iframe[src*="adservice"]',
+  'iframe[src*="taboola"]', 'iframe[src*="outbrain"]',
+  'iframe[src*="adnxs"]', 'iframe[src*="criteo"]', 'iframe[src*="/ads/"]'
+].join(',');
+const AD_URL_RE = /doubleclick\.net|googlesyndication|googleadservices|adservice|adsystem|adnxs|criteo|taboola|outbrain|pubmatic|rubiconproject|\/ads?(\/|\.|\?|#)/i;
+
+function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
+
+function applyAdblock(frame) {
+  if (!frame || !adblockEnabled()) return;
+  try {
+    const doc = frame.contentDocument;
+    if (!doc || !doc.body) return;
+    if (!doc.getElementById('tc-adblock-style')) {
+      const st = doc.createElement('style');
+      st.id = 'tc-adblock-style';
+      st.textContent = AD_CSS_SELECTOR + '{display:none!important;visibility:hidden!important;height:0!important;width:0!important;}';
+      (doc.head || doc.documentElement).appendChild(st);
+    }
+    doc.querySelectorAll('iframe[src],img[src],script[src],link[href]').forEach(el => {
+      const u = el.getAttribute('src') || el.getAttribute('href') || '';
+      if (u && AD_URL_RE.test(u)) el.remove();
+    });
+  } catch (e) { /* クロスオリジン等はβでは無視 */ }
+}
+
+function toggleAdblock() {
+  localStorage.setItem(ADBLOCK_KEY, adblockEnabled() ? 'false' : 'true');
+  updateAdblockBtn();
+  document.querySelectorAll('iframe.browser-frame').forEach(f => {
+    if (adblockEnabled()) { applyAdblock(f); return; }
+    try {
+      const st = f.contentDocument && f.contentDocument.getElementById('tc-adblock-style');
+      if (st) st.remove();
+    } catch (e) {}
+  });
+}
+
+function updateAdblockBtn() {
+  const btn = document.getElementById('ext-adblock-btn');
+  if (btn) btn.classList.toggle('ext-off', !adblockEnabled());
+}
+window.toggleAdblock = toggleAdblock;
+updateAdblockBtn();

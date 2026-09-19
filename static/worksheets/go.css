@@ -1584,3 +1584,13 @@ body.ui-hidden #content-area {
    空の間は display:none でレイアウトに影響させない。 */
 #ext-btn-area { display: flex; align-items: center; gap: 4px; }
 #ext-btn-area:empty { display: none; }
+
+/* ── 拡張機能: 広告ブロック（β / v2.2.0）──────── */
+#ext-adblock-btn { position: relative; }
+#ext-adblock-btn.ext-off { opacity: .4; }
+.ext-beta-badge {
+  position: absolute; top: 1px; right: 1px;
+  font-size: 8px; line-height: 1; font-weight: 700;
+  padding: 1px 3px; border-radius: 4px;
+  background: #1d9bf0; color: #fff;
+}
