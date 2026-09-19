@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TheCollapse</title>
+<link rel="stylesheet" href="/worksheets/go.css">
+<!-- deferでスクリプトの同期ブロックを防ぐ（uv.bundle.jsは1.6MBあるため必須） -->
+<script src="/worksheets/uv/uv.bundle.js" defer></script>
+<script src="/worksheets/uv/uv.config.js" defer></script>
+<script src="/worksheets/account.js" defer></script>
+<!-- テーマ初期化（FOUC防止のためdeferなし） -->
+<script>
+(function(){
+  var t = localStorage.getItem('go_theme') || 'dark';
+  if (t === 'system') {
+    t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+</head>
+<body>
+
+<!-- ローディングオーバーレイ -->
+<div id="tc-loading-overlay" style="
+  position:fixed;inset:0;z-index:9999;
+  background:var(--bg,#202124);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity .3s ease;
+  font-family:var(--font,-apple-system,sans-serif);
+">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div style="width:48px;height:48px;background:linear-gradient(135deg,#8ab4f8,#c58af9);border-radius:14px;display:flex;align-items:center;justify-content:center;">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    <span style="font-size:18px;font-weight:600;color:var(--text,#e8eaed);letter-spacing:-.3px;">TheCollapse</span>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;" id="tc-loading-dots">
+    <span style="width:7px;height:7px;border-radius:50%;background:#8ab4f8;animation:tc-bounce .9s ease-in-out infinite;animation-delay:0s;display:inline-block;"></span>
+    <span style="width:7px;height:7px;border-radius:50%;background:#9baef9;animation:tc-bounce .9s ease-in-out infinite;animation-delay:.15s;display:inline-block;"></span>
+    <span style="width:7px;height:7px;border-radius:50%;background:#c58af9;animation:tc-bounce .9s ease-in-out infinite;animation-delay:.3s;display:inline-block;"></span>
+  </div>
+  <span id="tc-loading-label" style="font-size:12px;color:var(--muted,#9aa0a6);letter-spacing:.04em;">読み込み中...</span>
+</div>
+<style>
+@keyframes tc-bounce {
+  0%,80%,100%{transform:translateY(0);opacity:.5}
+  40%{transform:translateY(-8px);opacity:1}
+}
+</style>
+
+<!-- コンテンツエリア -->
+<div id="content-area"></div>
+
+<!-- ======= タブストリップ（上部）======= -->
+<div id="tab-strip">
+  <div id="tab-strip-list"></div>
+  <button id="tab-strip-new-btn" onclick="newTab()" title="新しいタブ">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+</div>
+
+<!-- ======= ナビゲーションバー（Safari 風・1列）======= -->
+<div id="bottom-nav">
+  <!-- 戻るボタン -->
+  <button class="bottom-nav-btn" id="back-btn" onclick="goBack()" title="戻る" disabled>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <!-- 進むボタン -->
+  <button class="bottom-nav-btn" id="forward-btn" onclick="goForward()" title="進む" disabled>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+
+  <!-- 再読み込みボタン -->
+  <button class="bottom-nav-btn" id="reload-btn" onclick="reloadTab()" title="再読み込み">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+  </button>
+
+  <!-- ホームボタン -->
+  <button class="bottom-nav-btn" id="home-btn" onclick="goHome()" title="ホーム">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+  </button>
+
+  <!-- アドレスバー（中央・ピル型） -->
+  <div id="address-bar-center" onclick="focusAddressInput()">
+    <input type="text" id="address-input" placeholder="検索またはURLを入力" onkeydown="onAddressKey(event)" onfocus="this.select()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  </div>
+
+  <!-- ブックマーク追加ボタン -->
+  <button class="bottom-nav-btn" id="add-bookmark-btn" data-panel-toggle="bookmark" onclick="addBookmark()" title="このページをブックマークに追加">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+  </button>
+
+  <!-- ブックマーク一覧ボタン -->
+  <button class="bottom-nav-btn" id="bookmark-list-btn" data-panel-toggle="bookmark" onclick="toggleBookmarkPanel()" title="ブックマークを表示">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+  </button>
+
+  <!-- 履歴ボタン -->
+  <button class="bottom-nav-btn" id="history-btn" data-panel-toggle="history" onclick="toggleHistoryPanel()" title="履歴">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  </button>
+
+  <!-- その他メニュー -->
+  <button class="bottom-nav-btn" id="more-options-btn" data-panel-toggle="more" onclick="toggleMoreOptions()" title="その他の項目">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+  </button>
+</div>
+
+<!-- UI表示ボタン（非表示時） -->
+<button id="show-ui-btn" onclick="showUI()" title="UIを表示">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+</button>
+
+<!-- ブックマークパネル -->
+<div id="bookmark-panel">
+  <div class="bm-header">
+    <div class="bm-title">
+      <span>ブックマーク</span>
+      <span class="bm-count" id="bookmark-count">0</span>
+    </div>
+  </div>
+  <div id="bookmark-list"></div>
+</div>
+
+<!-- 履歴パネル -->
+<div id="history-panel">
+  <div class="hist-header">
+    <div class="hist-title">
+      <span>履歴</span>
+      <span class="hist-count" id="history-count">0</span>
+    </div>
+    <button class="hist-clear-btn" onclick="clearHistory()" title="履歴をすべて削除" aria-label="履歴をすべて削除">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    </button>
+  </div>
+  <div class="hist-search-wrap">
+    <div class="hist-search-field">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="history-search" placeholder="履歴を検索…" oninput="renderHistoryList()" autocomplete="off" spellcheck="false">
+      <button type="button" class="hist-search-clear" id="history-search-clear" title="検索を消す" aria-label="検索を消す" onclick="clearHistorySearch()" style="display:none">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- その他メニュー -->
+<div id="more-options-panel">
+  <div class="mo-quick-row">
+    <button class="mo-quick" data-panel-toggle="bookmark" onclick="toggleBookmarkPanel();toggleMoreOptions()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <span>Bookmarks</span>
+    </button>
+    <button class="mo-quick" data-panel-toggle="history" onclick="toggleHistoryPanel();toggleMoreOptions()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>History</span>
+    </button>
+    <button class="mo-quick" data-panel-toggle="bookmark" onclick="toggleBookmarkPanel();toggleMoreOptions()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg>
+      <span>Reading list</span>
+    </button>
+    <button class="mo-quick" onclick="goHome();toggleMoreOptions()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M12 4h9"/><path d="M3 7h2"/><path d="M3 12h2"/><path d="M3 17h2"/></svg>
+      <span>What's new</span>
+    </button>
+  </div>
+  <div class="mo-divider"></div>
+  <button class="mo-item" onclick="reloadTab();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    ページを更新
+  </button>
+  <div class="mo-divider"></div>
+  <button class="mo-item" data-panel-toggle="bookmark" onclick="toggleBookmarkPanel();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    ブックマーク
+  </button>
+  <button class="mo-item" data-panel-toggle="bookmark" onclick="addBookmark();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    このページをブックマーク
+  </button>
+  <button class="mo-item" data-panel-toggle="history" onclick="event.stopPropagation();toggleHistoryPanel();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    履歴
+  </button>
+    <div class="mo-divider"></div>
+  <button class="mo-item" onclick="toggleFullscreen();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    フルスクリーン
+  </button>
+  <div class="mo-zoom-row">
+    <span class="mo-zoom-label">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      ズーム
+    </span>
+    <div class="mo-zoom-controls">
+      <button class="zoom-btn" onclick="adjustZoom(-10);event.stopPropagation()" title="縮小">−</button>
+      <span id="zoom-level-display">100%</span>
+      <button class="zoom-btn" onclick="adjustZoom(10);event.stopPropagation()" title="拡大">＋</button>
+    </div>
+  </div>
+  <div class="mo-divider"></div>
+  <button class="mo-item" onclick="toggleLogPanel();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    ログを表示
+  </button>
+  <button class="mo-item" onclick="toggleElementsPanel();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    Elements
+  </button>
+  <div class="mo-divider"></div>
+  <button class="mo-item" onclick="toggleGoAccountMenu()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    アカウント
+  </button>
+  <button class="mo-item" onclick="goHome();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    ホームに戻る
+  </button>
+  <button class="mo-item" onclick="hideUI();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+    UIを隠す
+  </button>
+</div>
+
+<!-- アカウントドロップダウン（go.html用） -->
+<div id="go-account-menu">
+  <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border);">
+    <div style="font-size:14px;font-weight:600;color:var(--text)" id="go-dd-name">ゲスト</div>
+    <div style="font-size:12px;color:var(--muted)" id="go-dd-role">ログインしていません</div>
+  </div>
+  <div id="go-dd-loggedin" style="display:none">
+    <div onclick="goToHome()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:var(--muted);cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      ホームへ戻る
+    </div>
+    <div onclick="doGoLogout()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:#f28b82;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='rgba(242,139,130,0.08)'" onmouseout="this.style.background=''">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      ログアウト
+    </div>
+  </div>
+  <div id="go-dd-loggedout">
+    <div onclick="goToHome()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:var(--muted);cursor:pointer" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      ログイン
+    </div>
+  </div>
+</div>
+
+<!-- ログパネル -->
+<div id="log-panel">
+  <div id="log-resize-handle"></div>
+  <div class="log-head">
+    <div class="log-head-top">
+      <div class="log-head-title">
+        ログ
+        <span class="log-count-badge" id="logCountBadge">0</span>
+        <div class="log-search-wrap">
+          <svg class="log-search-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="log-search" id="logSearch" type="text" placeholder="フィルター…" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="log-head-controls">
+        <button class="log-tool-btn" id="copyLogs" title="ログをコピー">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="log-tool-btn" id="clearLogs" title="ログをクリア">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+        <button class="log-tool-btn" onclick="toggleLogPanel()" title="閉じる">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="log-filter-bar" id="logFilterBar">
+      <button class="log-filter-btn f-all active" data-filter="all">All</button>
+      <button class="log-filter-btn f-info" data-filter="info">Info</button>
+      <button class="log-filter-btn f-ok" data-filter="ok">OK</button>
+      <button class="log-filter-btn f-warn" data-filter="warn">Warn</button>
+      <button class="log-filter-btn f-err" data-filter="err">Err</button>
+    </div>
+  </div>
+  <div class="log-body" id="logbox">
+    <div class="log-no-results" id="logNoResults">一致するエントリがありません</div>
+  </div>
+  <div class="log-footer">
+    <div class="log-status">
+      <span class="log-dot idle" id="logStatusDot"></span>
+      <span id="logStatusText">Ready</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="logStats" style="font-family:monospace;">0 件</span>
+      <button class="log-autoscroll-btn pinned" id="logAutoScrollBtn" title="自動スクロール">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+        自動
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ズームポップアップ -->
+<div id="zoom-popup"></div>
+
+<!-- Elements Inspector パネル -->
+<div id="elements-panel">
+  <div id="elem-resize-handle"></div>
+  <div class="elem-head">
+    <div class="elem-head-top">
+      <span class="elem-head-label">Elements</span>
+      <div class="elem-search-wrap">
+        <svg class="elem-search-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="elem-search" id="elemSearch" type="text" placeholder="タグ・属性をフィルター…" autocomplete="off" spellcheck="false">
+      </div>
+      <button class="elem-tool-btn" id="elemRefreshBtn" title="リフレッシュ">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button class="elem-tool-btn active" id="elemDetailToggleBtn" title="詳細パネル切替">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </button>
+      <button class="elem-tool-btn" onclick="toggleElementsPanel()" title="閉じる">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="elem-breadcrumb" id="elemBreadcrumb"></div>
+  </div>
+  <div class="elem-body" id="elemBody">
+    <ul class="elements-tree" id="elemTree"></ul>
+  </div>
+  <div id="elem-detail">
+    <div class="elem-tab-bar">
+      <button class="elem-tab active" data-tab="styles">Styles</button>
+      <button class="elem-tab" data-tab="box">Box</button>
+      <button class="elem-tab" data-tab="attrs">Attrs</button>
+    </div>
+    <div id="elem-detail-content"></div>
+  </div>
+</div>
+
+<!-- Elements コンテキストメニュー -->
+<div id="elem-ctx-menu">
+  <button class="elem-ctx-item" id="elemCtxSelector">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    セレクタをコピー
+  </button>
+  <button class="elem-ctx-item" id="elemCtxHtml">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    HTMLをコピー
+  </button>
+  <button class="elem-ctx-item" id="elemCtxText">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+    テキストをコピー
+  </button>
+</div>
+
+<!-- YouTube 動画再生のみ直接接続に対応 -->
+<script src="/worksheets/youtube-edu.js"></script>
+<script src="/worksheets/go.js"></script>
+</body>
+</html>
