@@ -413,6 +413,9 @@ function renderTabContent(tab) {
       applyAdblock(iframe);
       setTimeout(() => applyAdblock(iframe), 1500);
       setTimeout(() => applyAdblock(iframe), 4000);
+      applyMomongaHide(iframe);
+      setTimeout(() => applyMomongaHide(iframe), 1500);
+      setTimeout(() => applyMomongaHide(iframe), 4000);
       onFrameLoad(tab.id, iframe);
       // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
       attachFrameTracker(tab.id, iframe);
@@ -1257,9 +1260,26 @@ function toggleMoreOptions() {
 }
 
 // ======= 拡張機能パネル（拡張機能ボタンで開閉） =======
+// パネルは拡張機能ボタンの真上に開く（ボタンの位置から毎回計算する）
 function toggleExtPanel() {
-  document.getElementById('ext-panel').classList.toggle('open');
+  const panel = document.getElementById('ext-panel');
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) positionExtPanel();
 }
+function positionExtPanel() {
+  const panel = document.getElementById('ext-panel');
+  const btn = document.getElementById('ext-btn');
+  if (!panel || !btn) return;
+  const r = btn.getBoundingClientRect();
+  const w = panel.offsetWidth || 260;
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+  panel.style.left = left + 'px';
+}
+window.addEventListener('resize', () => {
+  const panel = document.getElementById('ext-panel');
+  if (panel && panel.classList.contains('open')) positionExtPanel();
+});
 window.toggleExtPanel = toggleExtPanel;
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2033,6 +2053,64 @@ function updateAdblockBtn() {
 }
 window.toggleAdblock = toggleAdblock;
 updateAdblockBtn();
+
+// ======= 拡張機能: モモンガ コメント非表示（v2.2.0） =======
+// momon-ga.me（エロ漫画ギャラリー）の評価・感想コメントの表示を無効にする拡張機能。
+// 対象サイトかどうかは decodeProxyUrl() でプロキシURLを元URLに復号して判定し、
+// 判定できたフレームにだけコメント系要素を隠すCSSを注入する（他のサイトには無影響）。
+const MOMONGA_KEY = 'ext_momonga_hide_comments';
+const MOMONGA_URL_RE = /momon-ga\.me/i;
+const MOMONGA_COMMENT_CSS = [
+  '#comments', '.comments', '.comments-area', '.comment-list', '.comment-respond', '#respond',
+  '[id*="comment" i]', '[class*="comment" i]'
+].join(',');
+
+function momongaHideEnabled() { return localStorage.getItem(MOMONGA_KEY) !== 'false'; }
+
+function isMomongaFrame(frame) {
+  try {
+    if (MOMONGA_URL_RE.test(decodeProxyUrl(frame.getAttribute('src') || ''))) return true;
+    return MOMONGA_URL_RE.test(decodeProxyUrl((frame.contentWindow && frame.contentWindow.location.href) || ''));
+  } catch (e) { return false; }
+}
+
+function applyMomongaHide(frame) {
+  if (!frame || !momongaHideEnabled() || !isMomongaFrame(frame)) return;
+  try {
+    const doc = frame.contentDocument;
+    if (!doc || !doc.body || doc.getElementById('tc-momonga-comment-hide')) return;
+    const st = doc.createElement('style');
+    st.id = 'tc-momonga-comment-hide';
+    st.textContent = MOMONGA_COMMENT_CSS + '{display:none!important;}';
+    (doc.head || doc.documentElement).appendChild(st);
+  } catch (e) { /* クロスオリジン等は無視 */ }
+}
+
+function removeMomongaHide(frame) {
+  try {
+    const st = frame.contentDocument && frame.contentDocument.getElementById('tc-momonga-comment-hide');
+    if (st) st.remove();
+  } catch (e) {}
+}
+
+function toggleMomongaHide() {
+  localStorage.setItem(MOMONGA_KEY, momongaHideEnabled() ? 'false' : 'true');
+  updateMomongaRow();
+  document.querySelectorAll('iframe.browser-frame').forEach(f => {
+    if (momongaHideEnabled()) { applyMomongaHide(f); return; }
+    removeMomongaHide(f);
+  });
+}
+
+function updateMomongaRow() {
+  const on = momongaHideEnabled();
+  const sw = document.getElementById('ext-switch-momonga');
+  if (sw) sw.classList.toggle('on', on);
+  const row = document.getElementById('ext-row-momonga');
+  if (row) row.classList.toggle('ext-off', !on);
+}
+window.toggleMomongaHide = toggleMomongaHide;
+updateMomongaRow();
 
 // ======= SNS共有ボタン（v2.2.0） =======
 // 表示中のサイトをSNS(sns.html)に共有する。投稿機能自体は今後のアップデートで実装。

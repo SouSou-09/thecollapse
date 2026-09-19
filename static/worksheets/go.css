@@ -1592,7 +1592,6 @@ body.ui-hidden #content-area {
 #ext-panel {
   position: fixed;
   bottom: calc(var(--bottom-bar-h) + var(--safe-bottom) + 8px);
-  left: 50%; transform: translateX(-50%);
   width: 260px;
   background: var(--surface2);
   border: 1px solid var(--border);
