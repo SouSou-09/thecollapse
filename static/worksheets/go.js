@@ -91,24 +91,38 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     if (initialURL) {
       // 保存済みURLの符号方式を自動判定する（エンジン切替の前後で古いタブが壊れないように）。
-      // base64として有効で http(s) に復号できれば v3(/service3/)、それ以外は従来(XOR)(/service/)。
-      let enginePrefixRestored = '/service/';
+      // v3(/service3/)=base64、従来(/service/)=XOR。
+      // 判定は「前方一致」だけでは不十分: デコード結果が https:// で始まるだけの壊れた
+      // バイナリ混じり文字列を v3 と誤判定し、SW側の atob で InvalidCharacterError
+      // エラーページになる事故があった。そこで
+      //   (1) デコード結果が print ASCIIのみの完全な http(s) URL であること
+      //   (2) 再符号化したら元の文字列と完全一致する（round-trip）こと
+      // を厳密に確認する。どちらの符号とも一致しない壊れた値は復元せずスキップし、
+      // 新規タブを開く（エラーページを開かない）。
+      const strictHttpUrl = (s) => typeof s === 'string' && /^https?:\/\/[!-~]+$/i.test(s);
       let decodedInitial = null;
       try {
-        if (window.UV3 && window.UV3.codec.base64) {
-          const d3 = window.UV3.codec.base64.decode(initialURL);
-          if (/^https?:\/\//i.test(d3)) { enginePrefixRestored = '/service3/'; decodedInitial = d3; }
+        const b3 = window.UV3 && window.UV3.codec && window.UV3.codec.base64;
+        if (b3 && typeof b3.decode === 'function') {
+          const d3 = b3.decode(initialURL);
+          if (strictHttpUrl(d3) && b3.encode(d3) === initialURL) decodedInitial = d3;
         }
       } catch (e) {}
       if (!decodedInitial) {
         try {
           if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl) {
             const d1 = __uv$config.decodeUrl(initialURL);
-            if (/^https?:\/\//i.test(d1)) decodedInitial = d1;
+            if (strictHttpUrl(d1) && __uv$config.encodeUrl(d1) === initialURL) decodedInitial = d1;
           }
         } catch (e) {}
       }
-      const fullURL = enginePrefixRestored + initialURL;
+      let fullURL = null;
+      if (decodedInitial) {
+        // 現行エンジンの符号で張り直す（保存時の符号と現行エンジンの混在を根絶する）
+        try { fullURL = await buildProxyUrl(decodedInitial); } catch (e) { fullURL = null; }
+      } else {
+        try { console.warn('[go] 復元用URLの符号を判定できなかったため復元をスキップ:', String(initialURL).slice(0, 60)); } catch (e) {}
+      }
 
       if (decodedInitial &&
           typeof TC_YT_EDU !== 'undefined' &&
@@ -1284,9 +1298,14 @@ function _uv3() {
       const s = document.createElement('script');
       s.src = '/uv3/uv.bundle.js';
       s.onload = () => {
-        window.UV3 = window.Ultraviolet;
+        // バンドルは UMD で window.Ultraviolet を生やす。将来のバージョンで
+        // エクスポート形状が変わっても undefined を UV3 に入れない。
+        const uv = window.Ultraviolet || (s.contentWindow && s.contentWindow.Ultraviolet) || null;
+        if (uv && uv.codec && uv.codec.base64) {
+          window.UV3 = uv;
+        }
         try { delete window.Ultraviolet; } catch (e) {}
-        resolve(window.UV3);
+        resolve(window.UV3 || null);
       };
       s.onerror = () => resolve(null);
       document.head.appendChild(s);
@@ -1308,9 +1327,21 @@ function encodeForEngine(url) {
 // 符号方式の不一致（atobエラー・Failed to load）を防ぐ。
 async function buildProxyUrl(url) {
   if (enginePrefix() === '/service3/') {
-    const uv3 = await _uv3();
-    if (uv3 && uv3.codec && uv3.codec.base64) {
-      return '/service3/' + uv3.codec.base64.encode(url);
+    let uv3 = null;
+    try { uv3 = await _uv3(); } catch (e) { uv3 = null; }
+    const b3 = uv3 && uv3.codec && uv3.codec.base64;
+    if (b3 && typeof b3.encode === 'function' && typeof b3.decode === 'function') {
+      // round-trip検証: SW側と同じcodecで復号して元に戻ることを保証する。
+      // 復号が不一致・例外なら壊れた符号を /service3/ に出さず従来エンジンへフォールバック。
+      try {
+        const enc = b3.encode(url);
+        if (typeof enc === 'string' && enc && b3.decode(enc) === url) {
+          return '/service3/' + enc;
+        }
+        try { console.warn('[engine] v3コーデックのround-trip検証に失敗したため従来エンジンで開きます'); } catch (e) {}
+      } catch (e) {
+        try { console.warn('[engine] v3コーデックで符号化できず従来エンジンで開きます:', e && e.message); } catch (e2) {}
+      }
     }
   }
   return '/service/' + __uv$config.encodeUrl(url);
