@@ -1258,7 +1258,7 @@ function toggleMoreOptions() {
 }
 
 // ======= 拡張機能パネル（拡張機能ボタンで開閉） =======
-// パネルは拡張機能ボタンの真上に開く（ボタンの位置から毎回計算する）
+// パネルは拡張機能ボタンの真下に開く（ボタンの位置から毎回計算・下に入りきらない場合は真上）
 function toggleExtPanel() {
   const panel = document.getElementById('ext-panel');
   const isOpen = panel.classList.toggle('open');
@@ -1273,8 +1273,16 @@ function positionExtPanel() {
   let left = r.left + r.width / 2 - w / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
   panel.style.left = left + 'px';
-  // パネルの下端をボタンの上端に4pxの隙間で接続（ボタンの実位置基準）
-  panel.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+  // 基本はボタンの真下に4pxの隙間で開く（ボタンの実位置基準）
+  // 下に入りきらない場合は従来どおり真上に開く
+  const h = panel.offsetHeight || 160;
+  if (r.bottom + 4 + h + 8 <= window.innerHeight) {
+    panel.style.top = (r.bottom + 4) + 'px';
+    panel.style.bottom = 'auto';
+  } else {
+    panel.style.top = 'auto';
+    panel.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+  }
 }
 window.addEventListener('resize', () => {
   const panel = document.getElementById('ext-panel');
