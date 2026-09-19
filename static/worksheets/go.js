@@ -1998,8 +1998,10 @@ document.addEventListener('click', e => {
 });
 // ======= 拡張機能: 広告ブロック（β / v2.2.0） =======
 // ON/OFFは下段ナビの拡張機能ボタン（パズル）→ 拡張機能一覧パネルで行う。
-// 仕組み: iframe 内に広告を隠すCSSを注入し、既知の広告配信ドメインの
-// iframe / img / script 要素を非表示にする（軽量実装・今後強化予定）。
+// 仕組み: iframe 内に広告を隠すCSS（クラス/ID根拠）を注入しつつ、URL根拠の
+// 判定はJS側で行う。プロキシ(/service/)はURLをエンコードしてsrc/hrefに書き込むため、
+// CSSの属性セレクタ [src*="ドメイン"] では一切一致しない（v2.2.0で根本修正）。
+// 動的に注入される広告も MutationObserver で監視して非表示にする。
 const ADBLOCK_KEY = 'ext_adblock';
 const AD_CSS_SELECTOR = [
   // AdSense / Google Publisher Tag
@@ -2052,7 +2054,7 @@ const AD_CSS_SELECTOR = [
   '[class*="post-ad"]', '[class*="article-ad"]', '[class*="entry-ad"]', '[class*="single-ad"]',
   '[id*="ad-wrap"]', '[id*="ad-area"]', '[id*="ad-box"]'
 ].join(',');
-// 既知の広告配信ドメイン（URL一致はCSSの属性セレクタで行う）
+// 既知の広告配信ドメイン（URL一致はJS側で復号して照合する）
 const AD_URL_DOMAINS = [
   'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice', 'amazon-adsystem',
   'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr', 'bidswitch', 'sharethrough',
@@ -2068,28 +2070,101 @@ const AD_URL_DOMAINS = [
   // 日本のまとめサイト系（裏広告 / 出会い系 / 広告リンク短縮）
   'pcmax', 'happymail', 'wakuwaku', 'i2i.jp', 'zucks', 'adf.ly'
 ];
-const AD_URL_CSS = AD_URL_DOMAINS.map(d =>
-  `iframe[src*="${d}"],img[src*="${d}"],script[src*="${d}"],link[href*="${d}"]`
-).join(',');
-
 function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
+
+// 属性値を復号して広告ドメインと照合する（生の値も両方見る）
+function _adIsAdUrl(u) {
+  if (!u) return false;
+  let dec = null;
+  try {
+    const prefix = (typeof __uv$config !== 'undefined' && __uv$config.prefix) || '/service/';
+    if (typeof __uv$config !== 'undefined' && __uv$config.decodeUrl && String(u).indexOf(prefix) === 0) {
+      dec = String(__uv$config.decodeUrl(String(u).slice(prefix.length)) || '');
+    }
+  } catch (e) {}
+  const raw = String(u).toLowerCase();
+  const d = (dec || '').toLowerCase();
+  for (let i = 0; i < AD_URL_DOMAINS.length; i++) {
+    const dom = AD_URL_DOMAINS[i];
+    if (raw.indexOf(dom) !== -1 || (d && d.indexOf(dom) !== -1)) return true;
+  }
+  return false;
+}
+
+// doc 内の要素を走査して URL根拠で広告と判断した要素をインライン非表示にする。
+// 非表示にした要素はスタイルタグに記録し、トグルOFFで復元できるようにする。
+function _adScanDoc(doc, st) {
+  const hidden = st.__hidden;
+  const els = doc.querySelectorAll('iframe,img,embed,object,video,source,script,link,a');
+  for (let i = 0; i < els.length; i++) {
+    const el = els[i];
+    if (el.__tcAdHidden) continue;
+    let hit = false;
+    const attrs = ['src', 'href', 'data-src'];
+    for (let j = 0; j < attrs.length; j++) {
+      const v = el.getAttribute(attrs[j]);
+      if (v && _adIsAdUrl(v)) { hit = true; break; }
+    }
+    if (!hit) continue;
+    hidden.push({ el: el, prev: (el.style && el.style.display) || '' });
+    el.__tcAdHidden = true;
+    try { el.style.setProperty('display', 'none', 'important'); } catch (e) {}
+  }
+}
+
+// トグルOFF: 非表示にした要素を復元し、監視を停止してスタイルタグを外す
+function _adTeardown(frame) {
+  try {
+    const doc = frame.contentDocument;
+    if (!doc) return;
+    const st = doc.getElementById('tc-adblock-style');
+    if (!st) return;
+    (st.__hidden || []).forEach(h => {
+      try { h.el.style.display = h.prev; } catch (e) {}
+      try { delete h.el.__tcAdHidden; } catch (e) {}
+    });
+    st.__hidden = [];
+    if (st.__observer) { try { st.__observer.disconnect(); } catch (e) {} }
+    st.__observer = null;
+    st.remove();
+  } catch (e) {}
+}
 
 function applyAdblock(frame) {
   if (!frame || !adblockEnabled()) return;
   try {
     const doc = frame.contentDocument;
     if (!doc || !doc.body) return;
-    if (!doc.getElementById('tc-adblock-style')) {
-      const st = doc.createElement('style');
+    let st = doc.getElementById('tc-adblock-style');
+    if (!st) {
+      st = doc.createElement('style');
       st.id = 'tc-adblock-style';
-      // 広告要素は remove せず CSS のみで非表示にする。
-      // - トグルOFFでスタイルを外すだけで即復元できる（removeだと再読み込みまで欠けたまま）
-      // - スタイルタグが残り続けるため、後から動的に注入される広告も自動で非表示になる
-      // - 幅広いURL判定で正規の script まで消してページを壊す事故もなくなる
-      st.textContent = AD_CSS_SELECTOR + ',' + AD_URL_CSS +
+      st.__hidden = [];
+      // クラス/ID根拠の広告は従来どおりCSSで非表示（残り続けるため
+      // 後から注入される広告も自動で隠れる。URL根拠は下のJS判定が担当）
+      st.textContent = AD_CSS_SELECTOR +
         '{display:none!important;visibility:hidden!important;height:0!important;width:0!important;}';
       (doc.head || doc.documentElement).appendChild(st);
+      // 動的に注入される広告を追跡（変化を400msに間引いて走査）
+      try {
+        const MO = (doc.defaultView && doc.defaultView.MutationObserver) ||
+          (typeof window !== 'undefined' ? window.MutationObserver : null);
+        if (MO) {
+          let timer = 0;
+          const obs = new MO(() => {
+            if (timer) return;
+            timer = setTimeout(() => {
+              timer = 0;
+              try { _adScanDoc(doc, st); } catch (e) {}
+            }, 400);
+          });
+          obs.observe(doc.documentElement || doc, { childList: true, subtree: true, attributes: true });
+          st.__observer = obs;
+        }
+      } catch (e) {}
     }
+    // URL根拠の初回スキャン
+    _adScanDoc(doc, st);
   } catch (e) { /* クロスオリジン等はβでは無視 */ }
 }
 
@@ -2098,10 +2173,7 @@ function toggleAdblock() {
   updateAdblockBtn();
   document.querySelectorAll('iframe.browser-frame').forEach(f => {
     if (adblockEnabled()) { applyAdblock(f); return; }
-    try {
-      const st = f.contentDocument && f.contentDocument.getElementById('tc-adblock-style');
-      if (st) st.remove();
-    } catch (e) {}
+    _adTeardown(f);
   });
 }
 
