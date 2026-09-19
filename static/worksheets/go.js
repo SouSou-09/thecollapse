@@ -410,12 +410,7 @@ function renderTabContent(tab) {
     iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('referrerpolicy', 'same-origin');
     iframe.onload = () => {
-      applyAdblock(iframe);
-      setTimeout(() => applyAdblock(iframe), 1500);
-      setTimeout(() => applyAdblock(iframe), 4000);
-      applyMomongaHide(iframe);
-      setTimeout(() => applyMomongaHide(iframe), 1500);
-      setTimeout(() => applyMomongaHide(iframe), 4000);
+      scheduleExtensions(iframe);
       onFrameLoad(tab.id, iframe);
       // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
       attachFrameTracker(tab.id, iframe);
@@ -714,6 +709,7 @@ function navigateTab(tabId, query) {
       iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('referrerpolicy', 'same-origin');
       iframe.onload = () => {
+        scheduleExtensions(iframe);
         onFrameLoad(tabId, iframe);
         // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
         attachFrameTracker(tabId, iframe);
@@ -766,6 +762,7 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
   iframe.setAttribute('allowfullscreen', '');
   iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   iframe.onload = () => {
+        scheduleExtensions(iframe);
     setLogStatus('idle', 'Ready');
     addLog('YouTube 直接再生: 読み込み完了', 'ok');
     // 履歴に記録(タイトルは取れない可能性が高いので URL のみ)
@@ -817,6 +814,7 @@ function fallbackToProxy(tabId, url) {
       iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('referrerpolicy', 'same-origin');
       iframe.onload = () => {
+        scheduleExtensions(iframe);
         onFrameLoad(tabId, iframe);
         // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
         attachFrameTracker(tabId, iframe);
@@ -2074,11 +2072,22 @@ function isMomongaFrame(frame) {
   } catch (e) { return false; }
 }
 
+function isMomongaDoc(doc) {
+  try {
+    const link = doc.querySelector('link[rel="canonical"]');
+    const meta = doc.querySelector('meta[property="og:url"]');
+    if (link && MOMONGA_URL_RE.test(link.href || '')) return true;
+    if (meta && MOMONGA_URL_RE.test(meta.content || '')) return true;
+  } catch (e) {}
+  return false;
+}
+
 function applyMomongaHide(frame) {
-  if (!frame || !momongaHideEnabled() || !isMomongaFrame(frame)) return;
+  if (!frame || !momongaHideEnabled()) return;
   try {
     const doc = frame.contentDocument;
     if (!doc || !doc.body || doc.getElementById('tc-momonga-comment-hide')) return;
+    if (!isMomongaFrame(frame) && !isMomongaDoc(doc)) return;
     const st = doc.createElement('style');
     st.id = 'tc-momonga-comment-hide';
     st.textContent = MOMONGA_COMMENT_CSS + '{display:none!important;}';
@@ -2111,6 +2120,20 @@ function updateMomongaRow() {
 }
 window.toggleMomongaHide = toggleMomongaHide;
 updateMomongaRow();
+
+// 全ての拡張機能をiframeへまとめて適用する統一フック。onload直後はDOMが
+// 完全でないことが多いため、1.5秒後・4秒後にも再適用する。
+// （従来はタブ復元経路でしか呼ばれておらず、アドレスバーから開いた
+//   ページには一切適用されていなかった — v2.2.0で修正）
+function applyAllExtensions(frame) {
+  applyAdblock(frame);
+  applyMomongaHide(frame);
+}
+function scheduleExtensions(frame) {
+  applyAllExtensions(frame);
+  setTimeout(() => applyAllExtensions(frame), 1500);
+  setTimeout(() => applyAllExtensions(frame), 4000);
+}
 
 // ======= SNS共有ボタン（v2.2.0） =======
 // 表示中のサイトをSNS(sns.html)に共有する。投稿機能自体は今後のアップデートで実装。
