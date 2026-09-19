@@ -2004,6 +2004,8 @@ function toggleAdblock() {
 function updateAdblockBtn() {
   const btn = document.getElementById('ext-adblock-btn');
   if (btn) btn.classList.toggle('ext-off', !adblockEnabled());
+  const st = document.getElementById('mo-adblock-state');
+  if (st) st.textContent = adblockEnabled() ? 'ON' : 'OFF';
 }
 window.toggleAdblock = toggleAdblock;
 updateAdblockBtn();
