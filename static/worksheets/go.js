@@ -2014,19 +2014,41 @@ const AD_CSS_SELECTOR = [
   'iframe[src*="mgid"]', 'iframe[src*="revcontent"]', 'iframe[src*="exoclick"]',
   'iframe[src*="adsterra"]', 'iframe[src*="propellerads"]', 'iframe[src*="smartadserver"]',
   'iframe[src*="openx"]', 'iframe[src*="teads"]', 'iframe[src*="media.net"]',
-  'iframe[src*="/ads/"]',
+  // アダルト系広告ネットワークの iframe（ExoClick / TrafficStars 等）
+  'iframe[src*="magsrv"]', 'iframe[src*="exdynsrv"]', 'iframe[src*="realsrv"]',
+  'iframe[src*="tsyndicate"]', 'iframe[src*="plugrush"]', 'iframe[src*="ero-advertising"]',
+  'iframe[src*="clickadu"]', 'iframe[src*="admaven"]', 'iframe[src*="dditscdn"]',
+  'iframe[src*="adcash"]', 'iframe[src*="aducdn"]',
+  // 広告らしい URL パス（CSS非表示方式なので誤爆しても表示が消えるだけ）
+  'iframe[src*="/ads/"]', 'img[src*="/ads/"]', 'script[src*="/ads/"]', 'link[href*="/ads/"]',
+  'img[src*="/ad."]', 'iframe[src*="/ad."]', 'script[src*="/ad."]',
+  'img[src*="/banners/"]', 'iframe[src*="/banners/"]',
+  'iframe[src*="popunder"]', 'script[src*="popunder"]', 'img[src*="popunder"]', '[href*="popunder"]',
+  '[src*="clickunder"]', '[href*="clickunder"]',
   // 汎用の広告ラベル
-  '[aria-label*="advertisement" i]', '[title*="advertisement" i]'
+  '[aria-label*="advertisement" i]', '[title*="advertisement" i]',
+  // 広告コンテナで頻出するクラス・ID（アダルトサイトのウィジェット含む）
+  '[class*="exoclick"]', '[id*="exoclick"]',
+  '[class*="adbanner" i]', '[id*="adbanner" i]',
+  '[class*="ad-slot" i]', '[id*="ad-slot" i]', '[class*="adslot" i]', '[id*="adslot" i]',
+  '[class*="clickunder"]', '[id*="clickunder"]',
+  '[class*="preroll"]', '[id*="preroll"]',
+  '[class*="overlay-ad"]', '[id*="overlay-ad"]',
+  '[class*="sponsor"]', '[id*="sponsor"]'
 ].join(',');
 // 既知の広告配信ドメイン（URL一致はCSSの属性セレクタで行う）
 const AD_URL_DOMAINS = [
   'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice', 'amazon-adsystem',
   'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr', 'bidswitch', 'sharethrough',
   '33across', 'criteo', 'taboola', 'outbrain', 'mgid', 'revcontent', 'propellerads',
-  'propellerclick', 'adsterra', 'exoclick', 'hilltopads', 'popads', 'popcash',
-  'trafficfactory', 'trafficjunky', 'juicyads', 'smartadserver', 'openx.net', 'teads.tv',
-  'media.net', 'moatads', 'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin',
-  'vungle', 'inmobi', 'startapp', 'adskeeper'
+  'propellerclick', 'propellertracking', 'adsterra', 'exoclick', 'exdynsrv', 'magsrv',
+  'realsrv', 'hilltopads', 'popads', 'popcash', 'popmyads', 'trafficfactory', 'trafficjunky',
+  'trafficstars', 'tsyndicate', 'juicyads', 'plugrush', 'ero-advertising', 'eroadvertising',
+  'clickadu', 'zeropark', 'admaven', 'ad-maven', 'galaksion', 'adspyglass', 'adcash',
+  'aducdn', 'onclickads', 'onclckds', 'adsupply', 'adsco.re', 'evaadm', 'evadav',
+  'waframedia', 'smartadserver', 'openx.net', 'teads.tv', 'media.net', 'moatads',
+  'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin', 'vungle', 'inmobi',
+  'startapp', 'adskeeper', 'dditscdn', 'badoink', 'stripcash'
 ];
 const AD_URL_CSS = AD_URL_DOMAINS.map(d =>
   `iframe[src*="${d}"],img[src*="${d}"],script[src*="${d}"],link[href*="${d}"]`
