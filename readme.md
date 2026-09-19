@@ -64,9 +64,9 @@ node index.js
 - Renderに対応
 - ホームに追加ボタンを削除
 - readme.mdを変更
+- 依存関係に web-push を追加したため npm install の再実行が必要です
 
 ## v2.1.0
-依存関係に web-push を追加したため npm install の再実行が必要です
 
 ### 修正
 
