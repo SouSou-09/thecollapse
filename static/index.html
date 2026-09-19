@@ -419,6 +419,23 @@ footer {
 /* オーバーレイ表示中は背面のスクロールを止める */
 body.browser-open { overflow: hidden; }
 </style>
+<style>
+/* ======= スマホ版デザイン改善（v2.2.0） ======= */
+@media (max-width: 640px) {
+  body { overflow-x: hidden; }
+  /* 入力欄を16px以上にして、iOSでのフォーカス時の自動ズームを防ぐ */
+  #searchInput, #address-input { font-size: 16px !important; }
+  /* タッチターゲットの拡大 */
+  .nav-btn { min-height: 40px; }
+  /* フッターは縦積みに */
+  footer { flex-direction: column; gap: 6px; align-items: center; text-align: center; padding: 18px 12px; }
+  /* モーダルが画面からはみ出さないように */
+  .modal { max-width: calc(100vw - 28px); }
+  .modal-backdrop { padding: 14px; }
+  /* 検索エンジンのメニューが画面幅を超えないように */
+  #engineMenu { max-width: calc(100vw - 24px); }
+}
+</style>
 </head>
 <body>
 

@@ -1959,15 +1959,31 @@ document.addEventListener('click', e => {
 // iframe / img / script 要素を除去する（軽量実装・今後強化予定）。
 const ADBLOCK_KEY = 'ext_adblock';
 const AD_CSS_SELECTOR = [
-  'ins.adsbygoogle',
-  '[id^="google_ads"]', '[id^="div-gpt-ad"]', '[id^="aswift"]',
-  '[class*="adsbygoogle"]', '[class*="advert"]', '[class*="AdSlot"]',
+  // AdSense / Google Publisher Tag
+  'ins.adsbygoogle', 'ins[data-ad-slot]', '[data-ad-client]',
+  '[id^="google_ads"]', '[id^="div-gpt-ad"]', '[id^="aswift"]', '[id^="gpt_unit"]',
+  'iframe[id^="google_ads_iframe"]', '[data-google-query-id]',
+  // Taboola / Outbrain
+  '[id^="taboola-"]', '[class*="taboola"]', '[class*="outbrain"]', '[id^="outbrain"]', '.OUTBRAIN',
+  // 広告クラス/IDのトークン（先頭・トークン境界のみに一致させ "read-" 等の誤爆を防ぐ）
+  '[class^="ad-"]', '[class*=" ad-"]', '[id^="ad-"]', '[id*=" ad-"]',
+  '[class*="adsbygoogle"]', '[class*="advert"]', '[class*="AdSlot"]', '[class*="adbox" i]',
+  // ポップアップ / 割り込み広告
+  '[class*="popunder"]', '[id*="popunder"]', '[class*="interstitial"]', '[id*="interstitial"]',
+  'amp-ad', 'amp-embed', 'amp-fx-flying-carpet',
+  // 既知の広告ドメインの iframe
   'iframe[src*="doubleclick.net"]', 'iframe[src*="googlesyndication"]',
   'iframe[src*="googleadservices"]', 'iframe[src*="adservice"]',
-  'iframe[src*="taboola"]', 'iframe[src*="outbrain"]',
-  'iframe[src*="adnxs"]', 'iframe[src*="criteo"]', 'iframe[src*="/ads/"]'
+  'iframe[src*="amazon-adsystem"]', 'iframe[src*="taboola"]', 'iframe[src*="outbrain"]',
+  'iframe[src*="adnxs"]', 'iframe[src*="criteo"]', 'iframe[src*="pubmatic"]',
+  'iframe[src*="mgid"]', 'iframe[src*="revcontent"]', 'iframe[src*="exoclick"]',
+  'iframe[src*="adsterra"]', 'iframe[src*="propellerads"]', 'iframe[src*="smartadserver"]',
+  'iframe[src*="openx"]', 'iframe[src*="teads"]', 'iframe[src*="media.net"]',
+  'iframe[src*="/ads/"]',
+  // 汎用の広告ラベル
+  '[aria-label*="advertisement" i]', '[title*="advertisement" i]'
 ].join(',');
-const AD_URL_RE = /doubleclick\.net|googlesyndication|googleadservices|adservice|adsystem|adnxs|criteo|taboola|outbrain|pubmatic|rubiconproject|\/ads?(\/|\.|\?|#)/i;
+const AD_URL_RE = /doubleclick\.net|googlesyndication|googleadservices|adservice|adsystem|amazon-adsystem|adnxs|adsafeprotected|adform|adroll|adsrvr|bidswitch|sharethrough|33across|criteo|taboola|outbrain|mgid|revcontent|propellerads|propellerclick|adsterra|exoclick|hilltopads|popads|popcash|trafficfactory|trafficjunky|juicyads|smartadserver|openx\.net|teads\.tv|(\.|\/\/|\?|&)media\.net|moatads|scorecardresearch|pubmatic|zedo|adcolony|applovin|vungle|inmobi|startapp|adskeeper|\/ads?(\/|\.|\?|#)/i;
 
 function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
 

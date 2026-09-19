@@ -1,0 +1,13 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: thecollapse
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci --omit=dev
+    startCommand: node index.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
