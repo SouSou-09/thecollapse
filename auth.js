@@ -54,6 +54,58 @@ function _persist() {
   return _saveQueue;
 }
 
+// ---- セッションの永続化（サーバー再起動・スリープ復帰でもログインを維持） ----
+// Render 等の無料プランはアイドル時にプロセスが落ちるため、セッションをメモリ専用に
+// すると再起動のたびに全ユーザーがログアウト状態になる（リロードで毎回ログアウトされる原因）。
+// そこで token -> { username, expiresAt } を auth-data/sessions.json にも書き出し、起動時に読み戻す。
+// トークンは秘密値なので保存先は auth.json と同じく静的配信されない auth-data/ のみ。
+const SESSIONS_FILE = join(AUTH_DIR, "sessions.json");
+let _sessionsLoadPromise = null;
+
+function _loadSessions() {
+  // 起動後に一度だけ読み込む。呼び出し側は返る Promise を await すれば
+  // 「読み込み完了後」であることが保証される（フラグ判定だと完了前に抜ける。
+  // 実際にリロード時のログアウト再現テストで SESSION_LOST になった）
+  if (!_sessionsLoadPromise) {
+    _sessionsLoadPromise = (async () => {
+      try {
+        if (!existsSync(SESSIONS_FILE)) return;
+        const parsed = JSON.parse(await readFile(SESSIONS_FILE, "utf8"));
+        if (!parsed || typeof parsed !== "object") return;
+        const now = Date.now();
+        for (const [token, s] of Object.entries(parsed)) {
+          if (
+            s && typeof s === "object" &&
+            typeof s.username === "string" &&
+            Number.isFinite(s.expiresAt) && s.expiresAt > now
+          ) {
+            _sessions.set(token, { username: s.username, expiresAt: s.expiresAt });
+          }
+        }
+      } catch (e) {
+        console.error("session load error:", e);
+      }
+    })();
+  }
+  return _sessionsLoadPromise;
+}
+
+let _sessionsSaveQueue = Promise.resolve();
+function _persistSessions() {
+  // 連続書き込みを直列化して破損を防ぐ（ユーザー情報の _persist と同じ方式）
+  _sessionsSaveQueue = _sessionsSaveQueue.then(async () => {
+    await mkdir(AUTH_DIR, { recursive: true });
+    const out = {};
+    const now = Date.now();
+    for (const [t, s] of _sessions) if (s.expiresAt > now) out[t] = s;
+    await writeFile(SESSIONS_FILE, JSON.stringify(out), "utf8");
+  }).catch((e) => console.error("session persist error:", e));
+  return _sessionsSaveQueue;
+}
+
+// モジュール読み込み時に即リストア（サーバー起動直後の最初のリクエストに間に合わせる）
+_loadSessions();
+
 async function _hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const derived = await scrypt(password, salt, SCRYPT_KEYLEN);
@@ -136,7 +188,14 @@ function _clearSessionCookie(res) {
 // 期限切れセッションの掃除
 setInterval(() => {
   const now = Date.now();
-  for (const [t, s] of _sessions) if (s.expiresAt < now) _sessions.delete(t);
+  let changed = false;
+  for (const [t, s] of _sessions) {
+    if (s.expiresAt < now) {
+      _sessions.delete(t);
+      changed = true;
+    }
+  }
+  if (changed) _persistSessions();
 }, 10 * 60 * 1000).unref?.();
 
 // ---- 認証済みユーザーの取得（ミドルウェア相当） ----
@@ -189,6 +248,7 @@ export function attachAuthRoutes(app) {
 
       const token = _newToken();
       _sessions.set(token, { username, expiresAt: Date.now() + SESSION_TTL_MS });
+      _persistSessions();
       _setSessionCookie(res, token);
       res.json({ ok: true, user: _publicUser(users[username]) });
     } catch (e) {
@@ -219,6 +279,7 @@ export function attachAuthRoutes(app) {
       const token = _newToken();
       // セッションには正規の格納キー(本来の username)を保存する
       _sessions.set(token, { username: u.username, expiresAt: Date.now() + SESSION_TTL_MS });
+      _persistSessions();
       _setSessionCookie(res, token);
       res.json({ ok: true, user: _publicUser(u) });
     } catch (e) {
@@ -230,13 +291,18 @@ export function attachAuthRoutes(app) {
   // ログアウト
   app.post("/api/auth/logout", (req, res) => {
     const cookies = parseCookies(req);
-    if (cookies.tc_session) _sessions.delete(cookies.tc_session);
+    if (cookies.tc_session) {
+      _sessions.delete(cookies.tc_session);
+      _persistSessions();
+    }
     _clearSessionCookie(res);
     res.json({ ok: true });
   });
 
   // 現在のセッション情報
   app.get("/api/auth/me", async (req, res) => {
+    // 永続化したセッションの読み込みが間に合っていない場合に備えて待つ
+    await _loadSessions();
     const username = getSessionUser(req);
     if (!username) return res.json({ user: null });
     const users = await _load();
@@ -299,7 +365,10 @@ export function attachAuthRoutes(app) {
       await _persist();
       // セッション破棄
       const cookies = parseCookies(req);
-      if (cookies.tc_session) _sessions.delete(cookies.tc_session);
+      if (cookies.tc_session) {
+        _sessions.delete(cookies.tc_session);
+        _persistSessions();
+      }
       _clearSessionCookie(res);
       // 関連データファイルも削除（best-effort）
       try {
