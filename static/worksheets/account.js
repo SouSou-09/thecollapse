@@ -11,6 +11,9 @@
 // =====================================================
 
 const TC_ACCOUNT = (() => {
+  // ---- 開発者アカウント（デベロッパータグを表示する専用ユーザー） ----
+  const TC_DEV_USERS = ['Sou930'];
+
   // ---- 内部状態 ----
   // _current は { username, icon, bg, createdAt, admin } など公開情報のみ。
   // パスワードハッシュは保持しない。
@@ -322,6 +325,8 @@ const TC_ACCOUNT = (() => {
   const API = {
     currentUser: () => _current ? _current.username : null,
     currentAccount: () => _current,
+    // 専用ユーザー（開発者）かどうか
+    isDev: (name) => TC_DEV_USERS.indexOf(name) >= 0,
 
     // アカウント作成（サーバーで scrypt ハッシュ化・セッション発行）
     async createAccount(username, password, iconDataUrl) {

@@ -96,6 +96,11 @@ function formatText(text) {
 function getRoom(id) { return state.rooms.find(r => r.id === id); }
 function isSelf(username) { return state.selfUser && state.selfUser.username === username; }
 
+/* デベロッパータグ表示対象か（account.js の専用リストで判定） */
+function isDevUser(name) {
+  try { return !!(window.TC_ACCOUNT && typeof TC_ACCOUNT.isDev === 'function' && TC_ACCOUNT.isDev(name)); } catch (e) { return false; }
+}
+
 /* ブラウザ通知 */
 function notify(sender, text) {
   if (!state.notifications || document.hasFocus()) return;
@@ -502,6 +507,7 @@ function renderMessages(room) {
     const avatarContent = makeAvatarHtml(msg.icon, msg.sender);
     const senderClass   = own ? 'own-sender' : '';
     const avatarClass   = own ? 'own-avatar' : '';
+    const devBadge = isDevUser(msg.sender) ? ' <span class="dev-badge" title="開発者">開発者</span>' : '';
 
     // 返信メッセージは引用を表示するためコンパクト化しない
     const compact = isCompact && !msg.replyTo;
@@ -529,7 +535,7 @@ function renderMessages(room) {
           </div>
           <div class="msg-body">
             <div class="msg-header">
-              <span class="msg-sender ${senderClass}">${escapeHtml(msg.sender)}</span>
+              <span class="msg-sender ${senderClass}">${escapeHtml(msg.sender)}</span>${devBadge}
               <span class="msg-timestamp">${escapeHtml(msg.timeFull || msg.time)}</span>
             </div>
             ${bubbleHtml(msg)}
@@ -566,6 +572,7 @@ function appendMessage(msg, room) {
   const isCompact  = lastSender === msg.sender && !msg.replyTo;
   const avatarContent = makeAvatarHtml(msg.icon, msg.sender);
   const avatarClass   = own ? 'own-avatar' : '';
+  const devBadge = isDevUser(msg.sender) ? ' <span class="dev-badge" title="開発者">開発者</span>' : '';
 
   const el = document.createElement('div');
   const sid = safeId(msg.id);
@@ -592,7 +599,7 @@ function appendMessage(msg, room) {
       </div>
       <div class="msg-body">
         <div class="msg-header">
-          <span class="msg-sender${own ? ' own-sender' : ''}">${escapeHtml(msg.sender)}</span>
+          <span class="msg-sender${own ? ' own-sender' : ''}">${escapeHtml(msg.sender)}</span>${devBadge}
           <span class="msg-timestamp">${escapeHtml(msg.timeFull || msg.time)}</span>
         </div>
         ${bubbleHtml(msg)}

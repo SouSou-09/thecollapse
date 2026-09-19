@@ -139,6 +139,13 @@ nav {
   overflow: hidden; flex-shrink: 0;
 }
 .acct-avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* デベロッパータグ（専用ユーザーのみ） */
+.dev-badge {
+  display: inline-block; font-size: 10px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #5b8fff, #a55bff);
+  border-radius: 999px; padding: 1px 8px; vertical-align: middle;
+  letter-spacing: 0.02em;
+}
 
 /* メイン */
 main {
@@ -462,7 +469,7 @@ body.browser-open { overflow: hidden; }
           News
         </a>
         <a href="./worksheets/sns.html" class="nav-btn" title="SNS（β・準備中）">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
           SNS
         </a>
         <a href="./worksheets/settings.html" class="nav-btn">
@@ -488,7 +495,10 @@ body.browser-open { overflow: hidden; }
   <div class="acct-dd-header" id="dd-header">
     <div class="acct-dd-avatar" id="dd-avatar"></div>
     <div>
-      <div class="acct-dd-name" id="dd-name">ゲスト</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="acct-dd-name" id="dd-name">ゲスト</div>
+        <span class="dev-badge" id="dd-dev-badge" style="display:none">開発者</span>
+      </div>
       <div class="acct-dd-role" id="dd-role">ログインしていません</div>
     </div>
   </div>
@@ -819,6 +829,7 @@ function renderAccountNav() {
   const ddAvatar  = document.getElementById('dd-avatar');
   const ddName    = document.getElementById('dd-name');
   const ddRole    = document.getElementById('dd-role');
+  const ddDevBadge = document.getElementById('dd-dev-badge');
   const ddLoggedIn  = document.getElementById('dd-logged-in');
   const ddLoggedOut = document.getElementById('dd-logged-out');
 
@@ -831,6 +842,7 @@ function renderAccountNav() {
     navLabel.textContent = user.username;
     ddAvatar.innerHTML = avatarHtml;
     ddName.textContent = user.username;
+    ddDevBadge.style.display = (typeof TC_ACCOUNT.isDev === 'function' && TC_ACCOUNT.isDev(user.username)) ? 'inline-block' : 'none';
     ddRole.textContent = 'ログイン中';
     ddLoggedIn.style.display = 'block';
     ddLoggedOut.style.display = 'none';
@@ -839,6 +851,7 @@ function renderAccountNav() {
     navLabel.textContent = 'ログイン';
     ddAvatar.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
     ddName.textContent = 'ゲスト';
+    ddDevBadge.style.display = 'none';
     ddRole.textContent = 'ログインしていません';
     ddLoggedIn.style.display = 'none';
     ddLoggedOut.style.display = 'block';

@@ -1472,3 +1472,11 @@ body {
 .ws-status { font-weight: 600; }
 .input-area { padding: 0 16px 20px; }
 .code-inline { padding: 1px 5px; }
+
+/* デベロッパータグ（専用ユーザーのみ） */
+.dev-badge {
+  display: inline-block; font-size: 10px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #5b8fff, #a55bff);
+  border-radius: 999px; padding: 1px 8px; vertical-align: middle;
+  letter-spacing: 0.02em;
+}

@@ -1292,9 +1292,7 @@ let _elemDetailVisible = true;
 
 function toggleElementsPanel() {
   const panel = document.getElementById('elements-panel');
-  const contentArea = document.getElementById('content-area');
   const isOpen = panel.classList.toggle('open');
-  contentArea.style.right = isOpen ? '360px' : '';
   if (isOpen) _elemInspectActive();
 }
 
@@ -1618,15 +1616,13 @@ window.addEventListener('DOMContentLoaded', () => {
   const resizeHandle = document.getElementById('elem-resize-handle');
   const panel = document.getElementById('elements-panel');
   if (resizeHandle && panel) {
-    let startX, startW;
+    let startY, startH;
     resizeHandle.addEventListener('mousedown', e => {
-      startX = e.clientX;
-      startW = panel.offsetWidth;
+      startY = e.clientY;
+      startH = panel.offsetHeight;
       const onMove = mv => {
-        const newW = Math.max(240, Math.min(window.innerWidth * 0.6, startW - (mv.clientX - startX)));
-        panel.style.width = newW + 'px';
-        const ca = document.getElementById('content-area');
-        if (panel.classList.contains('open')) ca.style.right = newW + 'px';
+        const delta = startY - mv.clientY;
+        panel.style.height = Math.max(120, Math.min(window.innerHeight - 100, startH + delta)) + 'px';
       };
       const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
       document.addEventListener('mousemove', onMove);

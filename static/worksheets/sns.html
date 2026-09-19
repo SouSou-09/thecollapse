@@ -11,20 +11,20 @@
   body {
     background: #000; color: #e7e9ea;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans JP", sans-serif;
-    min-height: 100vh; padding-bottom: 90px;
+    min-height: 100vh; padding-top: 56px; padding-bottom: 90px;
   }
   a { color: inherit; text-decoration: none; }
   header {
-    position: sticky; top: 0; z-index: 10;
+    position: sticky; top: 56px; z-index: 10;
     display: flex; align-items: center; gap: 12px;
     padding: 12px 16px;
     background: rgba(0,0,0,.85); backdrop-filter: blur(8px);
     border-bottom: 1px solid #2f3336;
   }
-  .x-logo { width: 26px; height: 26px; fill: #e7e9ea; flex: none; }
+  .sns-logo { width: 24px; height: 24px; flex: none; }
   .title { font-size: 18px; font-weight: 800; }
   .beta { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: #1d9bf0; border-radius: 999px; padding: 3px 10px; }
-  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 51px; background: #000; }
+  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 107px; background: #000; }
   .tab { flex: 1; text-align: center; padding: 14px 0; font-weight: 700; font-size: 14px; color: #71767b; cursor: default; position: relative; }
   .tab.active { color: #e7e9ea; }
   .tab.active::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 56px; height: 4px; border-radius: 999px; background: #1d9bf0; }
@@ -70,35 +70,75 @@
   footer { padding: 18px 16px 10px; text-align: center; font-size: 13px; color: #71767b; }
   footer a { color: #1d9bf0; }
 
-  /* 上部ナビバー（News / Setting と同じ構成） */
-  .tc-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; background: #000; border-bottom: 1px solid #2f3336; }
-  .tc-logo { display: flex; align-items: center; gap: 8px; color: #e7e9ea; font-weight: 800; font-size: 15px; }
-  .tc-nav-right { display: flex; align-items: center; gap: 2px; }
-  .tc-nav-btn { display: flex; align-items: center; gap: 6px; color: #71767b; font-size: 13px; font-weight: 700; padding: 8px 11px; border-radius: 999px; transition: background .12s, color .12s; }
-  .tc-nav-btn:hover { background: #16181c; color: #e7e9ea; }
-  .tc-nav-btn.active { color: #e7e9ea; }
-  .tc-nav-btn.active svg { color: #1d9bf0; }
+  /* 上部ナビバー（ホーム / News / Setting と同じデザイン・順番） */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; height: 56px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(14,17,23,0.85); backdrop-filter: blur(10px);
+    border-bottom: 1px solid #2f3336;
+  }
+  .nav-left { display: flex; align-items: center; gap: 10px; }
+  .nav-logo {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 17px; font-weight: 700; color: #e7e9ea;
+    text-decoration: none; letter-spacing: -0.3px;
+  }
+  .nav-right { display: flex; align-items: center; gap: 4px; }
+  .nav-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px;
+    font-size: 14px; font-weight: 500; color: #71767b;
+    text-decoration: none; background: none; border: none;
+    cursor: pointer; transition: color .15s, background .15s;
+  }
+  .nav-btn:hover, .nav-btn.active { color: #e7e9ea; background: #16181c; }
+  /* TheCollapseアカウントチップ（SNSはアカウント共通） */
+  .me-chip { margin-left: auto; display: flex; align-items: center; gap: 7px; border: 1px solid #2f3336; background: #16181c; color: #e7e9ea; border-radius: 999px; padding: 4px 12px 4px 5px; font-size: 13px; font-weight: 700; }
+  .me-chip:hover { background: #202328; }
+  .me-avatar { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg,#5b8fff,#a55bff); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; overflow: hidden; flex: none; }
+  .me-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .dev-badge { display: inline-block; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#5b8fff,#a55bff); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
 </style>
 </head>
 <body>
 
-<nav class="tc-nav">
-  <div class="tc-nav-left">
-    <a href="../index.html" class="tc-logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>TheCollapse</a>
+<nav>
+  <div class="nav-left">
+    <a href="../index.html" class="nav-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      TheCollapse
+    </a>
   </div>
-  <div class="tc-nav-right">
-    <a href="../index.html" class="tc-nav-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
-    <a href="news.html" class="tc-nav-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8z"/></svg>News</a>
-    <a href="settings.html" class="tc-nav-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Setting</a>
-    <a href="sns.html" class="tc-nav-btn active"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>SNS</a>
+  <div class="nav-right">
+    <a href="../index.html" class="nav-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="news.html" class="nav-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8z"/></svg>
+      News
+    </a>
+    <a href="sns.html" class="nav-btn active">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
+      SNS
+    </a>
+    <a href="settings.html" class="nav-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Setting
+    </a>
   </div>
 </nav>
 
 
   <header>
-    <svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    <svg class="sns-logo" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#e7e9ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
     <span class="title">SNS</span>
     <span class="beta">β</span>
+    <a class="me-chip" id="sns-me" href="../index.html" title="ログインして投稿">
+      <span class="me-avatar" id="sns-me-avatar"></span>
+      <span id="sns-me-name">ログイン</span>
+    </a>
   </header>
 
   <div class="tabs">
@@ -227,6 +267,42 @@
     });
   });
   apply();
+})();
+</script>
+
+<script src="/worksheets/account.js"></script>
+<script>
+// SNSのアカウントはTheCollapseのアカウントと共通：ログイン中ユーザーを表示する
+(async function () {
+  try {
+    if (typeof TC_ACCOUNT !== 'undefined' && typeof TC_ACCOUNT.restoreSession === 'function') {
+      try { await TC_ACCOUNT.restoreSession(); } catch (e) {}
+    }
+    if (typeof TC_ACCOUNT === 'undefined') return;
+    const user = TC_ACCOUNT.currentAccount();
+    const chip = document.getElementById('sns-me');
+    if (!chip) return;
+    const av = document.getElementById('sns-me-avatar');
+    const nm = document.getElementById('sns-me-name');
+    if (!user) {
+      av.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+      nm.textContent = 'ログイン';
+      chip.href = '../index.html';
+      chip.title = 'ログインして投稿';
+      return;
+    }
+    if (user.icon) av.innerHTML = '<img src="' + user.icon + '" alt="">';
+    else av.textContent = (user.username || '?').slice(0, 2).toUpperCase();
+    nm.textContent = '@' + user.username;
+    chip.removeAttribute('href');
+    chip.style.cursor = 'default';
+    if (typeof TC_ACCOUNT.isDev === 'function' && TC_ACCOUNT.isDev(user.username)) {
+      const b = document.createElement('span');
+      b.className = 'dev-badge';
+      b.textContent = '開発者';
+      chip.insertBefore(b, nm);
+    }
+  } catch (e) {}
 })();
 </script>
 </body>
