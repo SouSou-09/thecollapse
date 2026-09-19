@@ -444,14 +444,14 @@ body.browser-open { overflow: hidden; }
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8z"/></svg>
           News
         </a>
+        <a href="#" class="nav-btn" onclick="event.preventDefault(); alert('SNS機能は準備中です（今後のv2.2.0アップデートで実装予定）');" title="SNS（準備中）">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          SNS
+        </a>
         <a href="./worksheets/settings.html" class="nav-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
         </a>
-        <button id="install-pwa-btn" class="nav-btn" type="button" style="display:none;background:none;border:0;cursor:pointer;font:inherit;" title="ホーム画面に追加">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          ホームに追加
-        </button>
       </div>
   </div>
 </nav>
@@ -575,7 +575,7 @@ body.browser-open { overflow: hidden; }
 <footer>
   <div class="footer-left"></div>
   <div class="footer-right">
-    <span style="color:var(--muted);font-size:13px;">developer : sou930</span>
+    <span style="color:var(--muted);font-size:13px;">developer : SouSou09</span>
   </div>
 </footer>
 
@@ -698,7 +698,7 @@ const ENGINES = {
   bing:       { url: q => 'https://bing.com/search?q='+encodeURIComponent(q),       ph: 'Search Bing or type URL',       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="#0078D4"><path d="M5 2l4 1.4v13.8l4.6-2.6L9 12.4 13 6l6 8-7.5 4.3L5 20V2z"/></svg>` },
   duckduckgo: { url: q => 'https://duckduckgo.com/?q='+encodeURIComponent(q),       ph: 'Search DuckDuckGo or type URL', icon: `<svg width="20" height="20" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#DE5833"/><circle cx="50" cy="42" r="22" fill="white"/><circle cx="58" cy="36" r="5" fill="#333"/><circle cx="60" cy="35" r="2" fill="white"/><path d="M35 65 Q50 80 65 65" stroke="#333" stroke-width="3" fill="none" stroke-linecap="round"/></svg>` },
 };
-let current = TC_ACCOUNT.getEngine();
+let current = TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google';
 applyEngine(current, false);
 
 function applyEngine(e, save=true) {
@@ -1065,28 +1065,8 @@ function initPWA() {
     });
   }
 
-  // インストール可能になったら「ホームに追加」ボタンを表示
-  let deferredPrompt = null;
-  const btn = document.getElementById('install-pwa-btn');
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (btn) btn.style.display = 'inline-flex';
-  });
-  if (btn) {
-    btn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      try { await deferredPrompt.userChoice; } catch {}
-      deferredPrompt = null;
-      btn.style.display = 'none';
-    });
-  }
-  // インストール済み or スタンドアロン起動中はボタンを隠す
-  window.addEventListener('appinstalled', () => { if (btn) btn.style.display = 'none'; });
-  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-    if (btn) btn.style.display = 'none';
-  }
+  // 「ホームに追加」ボタンは v2.2.0 で削除。
+  // ブラウザメニューからの PWA インストールは pwa-sw.js の登録で引き続き可能。
 }
 
 // ===== 初期化 =====
@@ -1094,6 +1074,9 @@ function initPWA() {
   initPWA();
   loadVersionBadge();
   await TC_ACCOUNT.restoreSession();
+  // v2.2.0修正: セッション復元前に適用すると既定値のままになるため、復元後に再適用する
+  current = TC_ACCOUNT.getEngine() || localStorage.getItem('searchengine') || 'google';
+  applyEngine(current, false);
   renderAccountNav();
   applyBgFromAccount();
 })();

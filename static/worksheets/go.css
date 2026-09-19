@@ -1577,3 +1577,10 @@ body.ui-hidden #content-area {
   }
 }
 
+
+/* ── 拡張機能ボタンエリア（v2.2.0）────────────────
+   Browserモードの下段ナビで、ブックマーク追加ボタンの左に配置。
+   今後のv2.2.0アップデートで拡張機能ボタンをJSから注入する。
+   空の間は display:none でレイアウトに影響させない。 */
+#ext-btn-area { display: flex; align-items: center; gap: 4px; }
+#ext-btn-area:empty { display: none; }
