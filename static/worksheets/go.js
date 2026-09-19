@@ -1325,6 +1325,17 @@ function _elemInspectActive() {
   }
 }
 
+// プロキシ(UV)経由で書き換えられた属性URLを、元サイトのURLに復元して表示する
+function _elemDisplayAttrValue(v) {
+  try {
+    if (typeof v === 'string' && v.includes('/service/')) {
+      const d = decodeProxyUrl(v);
+      if (d && d !== v) return d;
+    }
+  } catch (e) {}
+  return v;
+}
+
 function _elemRenderNode(element, parent, depth, iframe) {
   if (!element || !element.tagName) return;
   const li = document.createElement('li');
@@ -1347,8 +1358,9 @@ function _elemRenderNode(element, parent, depth, iframe) {
   if (element.attributes) {
     for (let i = 0; i < Math.min(element.attributes.length, 4); i++) {
       const a = element.attributes[i];
+      const shown = _elemDisplayAttrValue(a.value);
       html += ' <span class="element-attr-name">' + _escHtml(a.name) + '</span>=';
-      html += '<span class="element-attr-value">"' + _escHtml(a.value.substring(0, 40)) + (a.value.length > 40 ? '…"' : '"') + '</span>';
+      html += '<span class="element-attr-value">"' + _escHtml(shown.substring(0, 40)) + (shown.length > 40 ? '…"' : '"') + '</span>';
     }
     if (element.attributes.length > 4) html += ' <span style="color:var(--muted)">…</span>';
   }
