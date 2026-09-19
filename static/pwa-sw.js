@@ -9,7 +9,7 @@
    下記の除外パスは厳守する。
 */
 
-const CACHE = "thecollapse-shell-v10";
+const CACHE = "thecollapse-shell-v11";
 
 // オフラインでも開けるよう最低限キャッシュするアプリシェル
 const SHELL = [
@@ -110,5 +110,50 @@ self.addEventListener("fetch", (event) => {
         .catch(() => cached);
       return cached || network;
     })
+  );
+});
+
+/* ── プッシュ通知（v2.2.0 SNS）─────────────────────────────
+   サーバー(web-push)から届いた新着投稿を表示する。
+   ペイロード: { title, body, url, tag }
+   通知は「ホーム画面に追加」した端末でのみ購読される
+   （購読処理は worksheets/push-client.js 側）。 */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "TheCollapse", {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag || "sns",
+      data: { url: data.url || "/worksheets/sns.html" },
+    })
+  );
+});
+
+// 通知クリック → 既に開いているウィンドウをフォーカスし SNS へ誘導。
+// 無ければ新しく開く。
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/worksheets/sns.html";
+  event.waitUntil(
+    (async () => {
+      const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of list) {
+        try {
+          if (new URL(client.url).origin === self.location.origin) {
+            await client.focus();
+            try { client.postMessage({ type: "tc-open-url", url: target }); } catch {}
+            return;
+          }
+        } catch {}
+      }
+      return self.clients.openWindow(target);
+    })()
   );
 });

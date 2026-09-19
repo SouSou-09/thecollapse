@@ -6,7 +6,7 @@
 <title>TheCollapse - SNS</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* SNS（v2.2.0・仮デザイン）
+  /* SNS（v2.2.0 本格実装）
      テーマ: TheCollapseのアップデート / TheCollapseへの改善案 / おすすめサイトの共有 */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -25,16 +25,28 @@
   .sns-logo { width: 24px; height: 24px; flex: none; }
   .title { font-size: 18px; font-weight: 800; }
   .beta { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: #1d9bf0; border-radius: 999px; padding: 3px 10px; }
-  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 107px; background: #000; }
-  .tab { flex: 1; text-align: center; padding: 14px 0; font-weight: 700; font-size: 14px; color: #71767b; cursor: default; position: relative; }
+  .tabs { display: flex; border-bottom: 1px solid #2f3336; position: sticky; top: 107px; background: #000; z-index: 9; }
+  .tab { flex: 1; text-align: center; padding: 14px 0; font-weight: 700; font-size: 14px; color: #71767b; cursor: pointer; position: relative; }
   .tab.active { color: #e7e9ea; }
   .tab.active::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 56px; height: 4px; border-radius: 999px; background: #1d9bf0; }
+  .tab:hover { color: #e7e9ea; }
   .notice { margin: 14px 16px 0; padding: 13px 16px; border: 1px solid #2f3336; border-radius: 16px; font-size: 13px; color: #71767b; line-height: 1.6; }
   .notice strong { color: #e7e9ea; }
-  /* 投稿（モック） */
-  .post { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2f3336; }
+  /* 投稿フォーム */
+  .composer { margin: 14px 16px 0; border: 1px solid #2f3336; border-radius: 16px; padding: 14px 16px; }
+  .composer h2 { font-size: 15px; margin-bottom: 10px; }
+  .c-select { background: #16181c; border: 1px solid #2f3336; color: #e7e9ea; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 13px; outline: none; cursor: pointer; }
+  .composer textarea { width: 100%; background: transparent; border: 0; color: #e7e9ea; font: inherit; font-size: 15px; line-height: 1.5; min-height: 84px; resize: vertical; margin-top: 10px; outline: none; }
+  .composer textarea::placeholder { color: #71767b; }
+  .c-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+  .c-hint { font-size: 12px; color: #71767b; line-height: 1.5; }
+  .c-err { font-size: 12px; color: #f4212e; margin-top: 6px; min-height: 15px; }
+  .post-btn { background: #1d9bf0; color: #fff; border: 0; border-radius: 999px; padding: 8px 18px; font-weight: 800; font-size: 14px; cursor: pointer; }
+  .post-btn:disabled { opacity: .5; cursor: default; }
+  /* 投稿 */
+  .post { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2f3336; transition: background .12s; }
+  .post:hover { background: rgba(255,255,255,.03); }
   .avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
-  .av-blue { background: #1d9bf0; } .av-purple { background: #7856ff; } .av-green { background: #00ba7c; }
   .p-body { flex: 1; min-width: 0; }
   .p-head { display: flex; align-items: center; gap: 6px; font-size: 14px; flex-wrap: wrap; }
   .p-name { font-weight: 800; } .p-sid, .p-time { color: #71767b; }
@@ -42,31 +54,53 @@
   .tag-update { background: rgba(29,155,240,.15); color: #1d9bf0; }
   .tag-idea { background: rgba(120,86,255,.15); color: #a08cff; }
   .tag-site { background: rgba(0,186,124,.15); color: #2ad3a5; }
-  .p-text { font-size: 15px; line-height: 1.55; margin-top: 4px; }
-  .p-text .hl { color: #1d9bf0; }
+  .p-text { font-size: 15px; line-height: 1.55; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
   /* おすすめサイトのリンクカード */
-  .linkcard {
-    margin-top: 10px; border: 1px solid #2f3336; border-radius: 14px; overflow: hidden;
-  }
+  .linkcard { margin-top: 10px; border: 1px solid #2f3336; border-radius: 14px; overflow: hidden; display: block; }
+  .linkcard:hover { border-color: #3d4348; }
   .linkcard-thumb { height: 92px; background: linear-gradient(135deg, #1d9bf0 0%, #7856ff 100%); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; letter-spacing: .04em; }
   .linkcard-body { padding: 10px 12px; font-size: 13px; }
   .linkcard-title { font-weight: 700; }
   .linkcard-url { color: #71767b; font-size: 12px; margin-top: 2px; word-break: break-all; }
-  /* 共有プレビュー（共有ボタンから来たとき表示） */
-  .composer { margin: 14px 16px 0; border: 1px solid #2f3336; border-radius: 16px; padding: 14px 16px; }
-  .composer h2 { font-size: 15px; margin-bottom: 10px; }
+  /* アクション（いいね / 返信 / 削除） */
+  .p-actions { display: flex; gap: 2px; margin-top: 8px; max-width: 400px; justify-content: space-between; }
+  .p-act { display: flex; align-items: center; gap: 6px; background: none; border: 0; color: #71767b; font-size: 13px; cursor: pointer; padding: 6px 10px; border-radius: 999px; font-family: inherit; }
+  .p-act:hover { background: rgba(29,155,240,.1); color: #1d9bf0; }
+  .p-act.liked { color: #f4212e; }
+  .p-act.liked svg { fill: #f4212e; }
+  .p-act.del:hover { background: rgba(244,33,46,.1); color: #f4212e; }
+  /* 返信 */
+  .replies { margin-top: 8px; border-top: 1px solid #2f3336; padding-top: 8px; display: none; }
+  .replies.open { display: block; }
+  .reply { display: flex; gap: 8px; padding: 6px 0; }
+  .r-av { width: 28px; height: 28px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; }
+  .r-body { flex: 1; min-width: 0; }
+  .r-head { font-size: 13px; }
+  .r-head .rn { font-weight: 700; }
+  .r-head .rt { color: #71767b; font-size: 12px; margin-left: 6px; }
+  .r-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .r-form { display: flex; gap: 8px; margin-top: 8px; }
+  .r-form input { flex: 1; background: #16181c; border: 1px solid #2f3336; border-radius: 999px; color: #e7e9ea; padding: 8px 14px; font: inherit; font-size: 14px; outline: none; }
+  .r-form input:focus { border-color: #1d9bf0; }
+  .r-send { background: #1d9bf0; border: 0; color: #fff; border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .r-send:disabled { opacity: .5; cursor: default; }
+  /* 共有プレビュー（Browserの共有ボタンから来たとき） */
   .composer .shared-card { display: flex; gap: 10px; border: 1px solid #2f3336; border-radius: 12px; padding: 10px 12px; }
   .composer .favicon-box { width: 38px; height: 38px; border-radius: 10px; background: #2f3336; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
   .composer .sc-title { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer .sc-url { font-size: 12px; color: #71767b; word-break: break-all; margin-top: 2px; }
   .composer .actions { display: flex; justify-content: flex-end; margin-top: 12px; }
-  .post-btn { background: #1d9bf0; color: #fff; border: 0; border-radius: 999px; padding: 8px 18px; font-weight: 800; font-size: 14px; cursor: pointer; }
+  .shared-ok { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #2ad3a5; font-weight: 700; }
+  /* 状態表示 */
+  .tab-empty { margin: 14px 16px 0; padding: 22px 16px; text-align: center; color: #71767b; font-size: 14px; border: 1px dashed #2f3336; border-radius: 16px; display: none; }
+  .login-notice { margin: 14px 16px 0; padding: 18px 16px; border: 1px solid #2f3336; border-radius: 16px; text-align: center; font-size: 14px; line-height: 1.7; color: #71767b; }
+  .login-notice a { color: #1d9bf0; font-weight: 700; }
   /* 右下の投稿ボタン（X風フローティング） */
   .fab {
     position: fixed; right: 20px; bottom: 24px;
     width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
     background: #1d9bf0; color: #fff; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 16px rgba(29,155,240,.4);
+    box-shadow: 0 4px 16px rgba(29,155,240,.4); z-index: 20;
   }
   footer { padding: 18px 16px 10px; text-align: center; font-size: 13px; color: #71767b; }
   footer a { color: #1d9bf0; }
@@ -190,13 +224,36 @@
     </a>
   </header>
 
-  <div class="tabs">
-    <div class="tab active">アップデート</div>
-    <div class="tab">改善案</div>
-    <div class="tab">おすすめサイト</div>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-cat="all">すべて</div>
+    <div class="tab" data-cat="update">アップデート</div>
+    <div class="tab" data-cat="improve">改善案</div>
+    <div class="tab" data-cat="site">おすすめサイト</div>
   </div>
 
-  <!-- 共有ボタン経由のときだけ表示される共有プレビュー -->
+  <!-- 投稿フォーム（ログイン時のみ表示） -->
+  <div class="composer" id="main-composer" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <select class="c-select" id="c-category">
+        <option value="improve" selected>改善案</option>
+      </select>
+      <span style="font-size:12px;color:#71767b" id="c-cat-hint"></span>
+    </div>
+    <textarea id="c-text" maxlength="2000" placeholder="TheCollapseへの改善案を書いてください"></textarea>
+    <div class="c-foot">
+      <span class="c-hint">おすすめサイトの共有は Browser の共有ボタンからできます</span>
+      <button class="post-btn" id="c-submit">投稿</button>
+    </div>
+    <div class="c-err" id="c-err"></div>
+  </div>
+
+  <!-- 未ログイン時 -->
+  <div class="login-notice" id="login-notice" style="display:none">
+    TheCollapseアカウントでログインすると投稿・いいね・返信ができます。<br>
+    <a href="../index.html">ログイン →</a>
+  </div>
+
+  <!-- 共有ボタン経由で開かれたときだけ表示される共有プレビュー -->
   <div class="composer" id="share-composer" style="display:none">
     <h2>このサイトをおすすめサイトとして共有する</h2>
     <div class="shared-card">
@@ -206,118 +263,25 @@
         <div class="sc-url" id="sc-url"></div>
       </div>
     </div>
-    <div class="actions"><button class="post-btn" onclick="alert('投稿機能は準備中です（今後のv2.2.0アップデートで実装予定）')">共有する</button></div>
+    <div class="c-err" id="sc-err"></div>
+    <div class="actions"><button class="post-btn" id="sc-submit">共有する</button></div>
   </div>
 
   <div class="notice">
-    <strong>SNSはβ準備中です。</strong>
-    TheCollapseのアップデート情報・TheCollapseへの改善案・おすすめサイトの共有を扱うコミュニティ機能です。
-    このページは仮デザイン（モック）で、投稿・タブ切替などの機能は今後のv2.2.0アップデートで実装予定です。
+    <strong>TheCollapse SNS</strong>
+    アップデート情報（デベロッパーが投稿）・TheCollapseへの改善案（誰でも投稿可）・おすすめサイトの共有（Browserの共有ボタンから）を扱うコミュニティ機能です。
+    新しい投稿は「ホーム画面に追加」した端末に通知されます（通知の受信カテゴリは設定から変更できます）。
   </div>
 
-  <!-- モック投稿 -->
-  <div class="post">
-    <div class="avatar av-blue">TC</div>
-    <div class="p-body">
-      <div class="p-head"><span class="p-name">TheCollapse公式</span><span class="p-sid">@TheCollapseApp · 9月19日</span><span class="p-tag tag-update">アップデート</span></div>
-      <div class="p-text">v2.2.0 をリリースしました。<br>・拡張機能β「広告ブロック」を追加<br>・Browserモードに共有ボタンを追加<br>・設定の検索エンジンが反映されない問題を修正 ほか</div>
-    </div>
-  </div>
-
-  <div class="post">
-    <div class="avatar av-purple">改</div>
-    <div class="p-body">
-      <div class="p-head"><span class="p-name">ユーザーA</span><span class="p-sid">@user_a · 9月19日</span><span class="p-tag tag-idea">改善案</span></div>
-      <div class="p-text">ブックマークにフォルダ分けができると嬉しいです。<span class="hl">#TheCollapse改善案</span></div>
-    </div>
-  </div>
-
-  <div class="post">
-    <div class="avatar av-green">共有</div>
-    <div class="p-body">
-      <div class="p-head"><span class="p-name">ユーザーB</span><span class="p-sid">@user_b · 9月19日</span><span class="p-tag tag-site">おすすめサイト</span></div>
-      <div class="p-text">これ便利だったからみんなもどうぞ</div>
-      <div class="linkcard">
-        <div class="linkcard-thumb">TheCollapse</div>
-        <div class="linkcard-body">
-          <div class="linkcard-title">TheCollapse - ホーム</div>
-          <div class="linkcard-url">example.com</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="timeline"></div>
+  <div class="tab-empty" id="tab-empty">まだ投稿はありません</div>
 
   <!-- X風フローティング投稿ボタン -->
-  <button class="fab" onclick="alert('投稿機能は準備中です（今後のv2.2.0アップデートで実装予定）')" title="投稿（準備中）" aria-label="投稿（準備中）">
+  <button class="fab" id="fab" title="投稿する" aria-label="投稿する">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
   </button>
 
   <footer><a href="../index.html">← ホームに戻る</a></footer>
-
-<script>
-// 共有ボタン経由で開かれたとき、共有ドラフトをプレビュー表示（β・モック）
-(function () {
-  try {
-    if (!new URLSearchParams(location.search).get('share')) return;
-    const d = JSON.parse(localStorage.getItem('tc_sns_draft') || 'null');
-    if (!d || !d.url) return;
-    const comp = document.getElementById('share-composer');
-    document.getElementById('sc-title').textContent = d.title || '(タイトルなし)';
-    document.getElementById('sc-url').textContent = d.url;
-    let host = '(サイト)';
-    try { host = new URL(d.url).hostname; } catch (e) {}
-    document.getElementById('sc-fav').textContent = (host.replace(/^www\./, '')[0] || '?').toUpperCase();
-    comp.style.display = 'block';
-    comp.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (e) {}
-})();
-</script>
-
-<style>
-  .post { transition: background .12s; }
-  .post:hover { background: rgba(255,255,255,.03); }
-  .tab { cursor: pointer; }
-  .tab:hover { color: #e7e9ea; }
-  .tab-empty { display: none; margin: 14px 16px 0; padding: 22px 16px; text-align: center; color: #71767b; font-size: 14px; border: 1px dashed #2f3336; border-radius: 16px; }
-</style>
-<script>
-(function(){
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
-  if (!tabs.length) return;
-  var posts = Array.prototype.slice.call(document.querySelectorAll('.post'));
-  var tabsEl = document.querySelector('.tabs');
-  var empty = document.createElement('div');
-  empty.className = 'tab-empty';
-  if (tabsEl) tabsEl.parentNode.insertBefore(empty, tabsEl.nextSibling);
-  function catOf(tabEl){
-    var t = tabEl.textContent || '';
-    if (t.indexOf('アップデート') >= 0) return 'tag-update';
-    if (t.indexOf('改善') >= 0) return 'tag-idea';
-    return 'tag-site';
-  }
-  function apply(){
-    var active = document.querySelector('.tab.active');
-    if (!active) return;
-    var cat = catOf(active);
-    var shown = 0;
-    posts.forEach(function(p){
-      var match = p.querySelector('.' + cat);
-      p.style.display = match ? '' : 'none';
-      if (match) shown++;
-    });
-    empty.style.display = shown ? 'none' : 'block';
-  }
-  tabs.forEach(function(t){
-    t.addEventListener('click', function(){
-      tabs.forEach(function(x){ x.classList.remove('active'); });
-      t.classList.add('active');
-      apply();
-      window.scrollTo(0, 0);
-    });
-  });
-  apply();
-})();
-</script>
 
 <script src="/worksheets/account.js"></script>
 <script>
@@ -332,38 +296,398 @@
   } catch {}
 })();
 </script>
+<script src="/worksheets/push-client.js"></script>
 <script>
-// SNSのアカウントはTheCollapseのアカウントと共通：ログイン中ユーザーを表示する
+// =====================================================
+//  SNS アプリ本体（v2.2.0 本格実装）
+// =====================================================
 (async function () {
-  try {
-    if (typeof TC_ACCOUNT !== 'undefined' && typeof TC_ACCOUNT.restoreSession === 'function') {
-      try { await TC_ACCOUNT.restoreSession(); } catch (e) {}
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var CAT_LABEL = { update: 'アップデート', improve: '改善案', site: 'おすすめサイト' };
+  var AV_COLORS = ['#1d9bf0', '#7856ff', '#00ba7c', '#f4212e', '#ffad1f', '#e0245e'];
+  var ICONS = {
+    heart: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
+    reply: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1-5.5a8.5 8.5 0 1 1 17-3z"/></svg>',
+    trash: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'
+  };
+
+  var CURRENT_USER = null;
+  var IS_DEV = false;
+  var POSTS = [];
+  var ACTIVE = 'all';
+  var shareDraft = null;
+
+  function relTime(ts) {
+    var s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return 'たった今';
+    var m = Math.floor(s / 60); if (m < 60) return m + '分前';
+    var h = Math.floor(m / 60); if (h < 24) return h + '時間前';
+    var d = Math.floor(h / 24); if (d < 7) return d + '日前';
+    var dt = new Date(ts);
+    return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
+  }
+  function avColor(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return AV_COLORS[h % AV_COLORS.length];
+  }
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+  }
+  function safeHref(url) {
+    return /^https?:\/\//i.test(url || '') ? url : null;
+  }
+  function tagClass(cat) { return cat === 'improve' ? 'tag-idea' : ('tag-' + cat); }
+
+  // ---- 投稿1件を描画（ユーザー入力はすべて textContent で挿入） ----
+  function renderPost(p) {
+    var el = document.createElement('div');
+    el.className = 'post';
+    el.dataset.id = p.id;
+
+    var av = document.createElement('div');
+    av.className = 'avatar';
+    av.style.background = avColor(p.author || '?');
+    av.textContent = (p.author || '?').slice(0, 2).toUpperCase();
+    el.appendChild(av);
+
+    var body = document.createElement('div');
+    body.className = 'p-body';
+    el.appendChild(body);
+
+    // 見出し: 名前 [開発者] @id・時間 [カテゴリ]
+    var head = document.createElement('div');
+    head.className = 'p-head';
+    var nm = document.createElement('span'); nm.className = 'p-name'; nm.textContent = p.author; head.appendChild(nm);
+    if (p.dev) {
+      var db = document.createElement('span'); db.className = 'dev-badge'; db.textContent = '開発者'; head.appendChild(db);
     }
-    if (typeof TC_ACCOUNT === 'undefined') return;
-    const user = TC_ACCOUNT.currentAccount();
-    const chip = document.getElementById('sns-me');
+    var sid = document.createElement('span'); sid.className = 'p-sid'; sid.textContent = '@' + p.author + ' · ' + relTime(p.createdAt); head.appendChild(sid);
+    var tag = document.createElement('span'); tag.className = 'p-tag ' + tagClass(p.category); tag.textContent = CAT_LABEL[p.category] || p.category; head.appendChild(tag);
+    body.appendChild(head);
+
+    if (p.text) {
+      var tx = document.createElement('div'); tx.className = 'p-text'; tx.textContent = p.text; body.appendChild(tx);
+    }
+
+    // おすすめサイトはリンクカードで表示
+    if (p.category === 'site' && p.url) {
+      var href = safeHref(p.url);
+      var card = document.createElement(href ? 'a' : 'div');
+      card.className = 'linkcard';
+      if (href) { card.href = href; card.target = '_blank'; card.rel = 'noopener noreferrer nofollow'; }
+      var thumb = document.createElement('div'); thumb.className = 'linkcard-thumb';
+      thumb.textContent = (hostOf(p.url)[0] || '?').toUpperCase();
+      card.appendChild(thumb);
+      var cb = document.createElement('div'); cb.className = 'linkcard-body';
+      var ct = document.createElement('div'); ct.className = 'linkcard-title'; ct.textContent = p.title || hostOf(p.url) || '(タイトルなし)';
+      var cu = document.createElement('div'); cu.className = 'linkcard-url'; cu.textContent = hostOf(p.url) || p.url;
+      cb.appendChild(ct); cb.appendChild(cu); card.appendChild(cb);
+      body.appendChild(card);
+    }
+
+    // アクション行
+    var acts = document.createElement('div');
+    acts.className = 'p-actions';
+    var liked = CURRENT_USER && p.likes && p.likes.indexOf(CURRENT_USER) >= 0;
+
+    var likeBtn = document.createElement('button');
+    likeBtn.className = 'p-act' + (liked ? ' liked' : '');
+    likeBtn.innerHTML = ICONS.heart;
+    likeBtn.appendChild(document.createTextNode(String((p.likes || []).length)));
+    likeBtn.addEventListener('click', function () { toggleLike(p, likeBtn); });
+    acts.appendChild(likeBtn);
+
+    var repBtn = document.createElement('button');
+    repBtn.className = 'p-act';
+    repBtn.innerHTML = ICONS.reply;
+    repBtn.appendChild(document.createTextNode(String((p.replies || []).length)));
+    repBtn.addEventListener('click', function () {
+      var ra = repArea;
+      ra.classList.toggle('open');
+      if (ra.classList.contains('open')) {
+        var inp = ra.querySelector('input');
+        if (inp) inp.focus();
+      }
+    });
+    acts.appendChild(repBtn);
+
+    if (CURRENT_USER && (CURRENT_USER === p.author || IS_DEV)) {
+      var delBtn = document.createElement('button');
+      delBtn.className = 'p-act del';
+      delBtn.innerHTML = ICONS.trash;
+      delBtn.title = '削除';
+      delBtn.addEventListener('click', function () {
+        if (!confirm('この投稿を削除しますか？')) return;
+        fetch('/api/sns/posts/' + encodeURIComponent(p.id), { method: 'DELETE', credentials: 'same-origin' })
+          .then(function (r) { if (r.ok) { POSTS = POSTS.filter(function (x) { return x.id !== p.id; }); render(); } else { alert('削除できませんでした'); } })
+          .catch(function () { alert('削除に失敗しました'); });
+      });
+      acts.appendChild(delBtn);
+    }
+    body.appendChild(acts);
+
+    // 返信エリア（既存返信 + 入力欄）
+    var repArea = document.createElement('div');
+    repArea.className = 'replies';
+    (p.replies || []).forEach(function (r) { repArea.appendChild(renderReply(r)); });
+    if (CURRENT_USER) {
+      var form = document.createElement('div');
+      form.className = 'r-form';
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.maxLength = 500; inp.placeholder = '返信を入力...';
+      var send = document.createElement('button');
+      send.className = 'r-send'; send.textContent = '返信';
+      send.addEventListener('click', function () {
+        var text = inp.value.trim();
+        if (!text) return;
+        send.disabled = true;
+        fetch('/api/sns/posts/' + encodeURIComponent(p.id) + '/replies', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text })
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            send.disabled = false;
+            if (res.ok && res.j.replies) {
+              p.replies = res.j.replies;
+              repArea.querySelectorAll('.reply').forEach(function (n) { n.remove(); });
+              p.replies.forEach(function (r) { repArea.insertBefore(renderReply(r), form); });
+              inp.value = '';
+              repBtn.childNodes[1].nodeValue = String(p.replies.length);
+            } else {
+              alert((res.j && res.j.error) || '返信できませんでした');
+            }
+          })
+          .catch(function () { send.disabled = false; alert('返信に失敗しました'); });
+      });
+      form.appendChild(inp); form.appendChild(send);
+      repArea.appendChild(form);
+    }
+    body.appendChild(repArea);
+
+    return el;
+  }
+
+  function renderReply(r) {
+    var row = document.createElement('div');
+    row.className = 'reply';
+    var av = document.createElement('div');
+    av.className = 'r-av';
+    av.style.background = avColor(r.author || '?');
+    av.textContent = (r.author || '?').slice(0, 2).toUpperCase();
+    row.appendChild(av);
+    var b = document.createElement('div'); b.className = 'r-body';
+    var h = document.createElement('div'); h.className = 'r-head';
+    var rn = document.createElement('span'); rn.className = 'rn'; rn.textContent = r.author;
+    var rt = document.createElement('span'); rt.className = 'rt'; rt.textContent = relTime(r.createdAt);
+    h.appendChild(rn); h.appendChild(rt);
+    var t = document.createElement('div'); t.className = 'r-text'; t.textContent = r.text;
+    b.appendChild(h); b.appendChild(t);
+    row.appendChild(b);
+    return row;
+  }
+
+  function render() {
+    var tl = $('timeline');
+    tl.textContent = '';
+    var list = POSTS.filter(function (p) { return ACTIVE === 'all' || p.category === ACTIVE; });
+    var frag = document.createDocumentFragment();
+    list.forEach(function (p) { frag.appendChild(renderPost(p)); });
+    tl.appendChild(frag);
+    var empty = $('tab-empty');
+    if (list.length === 0) {
+      empty.textContent = ACTIVE === 'all' ? 'まだ投稿はありません' : (CAT_LABEL[ACTIVE] + 'の投稿はまだありません');
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+    }
+  }
+
+  function load() {
+    return fetch('/api/sns/posts', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('load'); return r.json(); })
+      .then(function (data) { POSTS = data.posts || []; render(); })
+      .catch(function () {
+        var empty = $('tab-empty');
+        empty.textContent = '読み込みに失敗しました。再読み込みしてください';
+        empty.style.display = 'block';
+      });
+  }
+
+  function toggleLike(p, btn) {
+    if (!CURRENT_USER) { alert('いいねにはログインが必要です'); return; }
+    btn.disabled = true;
+    fetch('/api/sns/posts/' + encodeURIComponent(p.id) + '/like', { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (res.ok) {
+          p.likes = res.j.liked
+            ? (p.likes || []).concat([CURRENT_USER])
+            : (p.likes || []).filter(function (x) { return x !== CURRENT_USER; });
+          btn.classList.toggle('liked', !!res.j.liked);
+          btn.childNodes[1].nodeValue = String(p.likes.length);
+        } else if (res.j && res.j.error) {
+          alert(res.j.error);
+        }
+      })
+      .catch(function () { btn.disabled = false; });
+  }
+
+  // ---- タブ切替 ----
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+    t.addEventListener('click', function () {
+      document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active'); });
+      t.classList.add('active');
+      ACTIVE = t.dataset.cat || 'all';
+      render();
+      window.scrollTo(0, 0);
+    });
+  });
+
+  // ---- 投稿フォーム（権限でカテゴリを切替） ----
+  var cCat = $('c-category'), cText = $('c-text'), cSubmit = $('c-submit'), cErr = $('c-err');
+  var PLACEHOLDERS = {
+    improve: 'TheCollapseへの改善案を書いてください',
+    update: 'アップデート内容を記入してください（例: v2.2.1 をリリース）'
+  };
+  function setupComposer() {
+    if (IS_DEV) {
+      // アップデートはデベロッパーのみ選択可能
+      var opt = document.createElement('option');
+      opt.value = 'update'; opt.textContent = 'アップデート';
+      cCat.insertBefore(opt, cCat.firstChild);
+      cCat.value = 'improve';
+    }
+    function syncHint() {
+      cText.placeholder = PLACEHOLDERS[cCat.value] || '';
+      var hint = $('c-cat-hint');
+      if (cCat.value === 'update') hint.textContent = 'デベロッパーとして全ユーザーに通知されます';
+      else if (cCat.value === 'improve') hint.textContent = '改善案は全員が投稿できます';
+      else hint.textContent = '';
+    }
+    cCat.addEventListener('change', syncHint);
+    syncHint();
+    cSubmit.addEventListener('click', function () {
+      cErr.textContent = '';
+      var text = cText.value.trim();
+      if (!text) { cErr.textContent = '内容を入力してください'; return; }
+      cSubmit.disabled = true;
+      fetch('/api/sns/posts', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: cCat.value, text: text })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          cSubmit.disabled = false;
+          if (res.ok) {
+            cText.value = '';
+            cErr.textContent = '';
+            load();
+          } else {
+            cErr.textContent = (res.j && res.j.error) || '投稿に失敗しました';
+          }
+        })
+        .catch(function () { cSubmit.disabled = false; cErr.textContent = '投稿に失敗しました'; });
+    });
+    // 右下ボタン → フォームへ
+    $('fab').addEventListener('click', function () {
+      if (!CURRENT_USER) { location.href = '../index.html'; return; }
+      var mc = $('main-composer');
+      mc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function () { cText.focus(); }, 350);
+    });
+  }
+
+  // ---- Browser共有（おすすめサイトはここからのみ投稿） ----
+  function setupShare() {
+    if (!new URLSearchParams(location.search).get('share')) return;
+    try { shareDraft = JSON.parse(localStorage.getItem('tc_sns_draft') || 'null'); } catch (e) {}
+    if (!shareDraft || !shareDraft.url) return;
+    $('sc-title').textContent = shareDraft.title || '(タイトルなし)';
+    $('sc-url').textContent = shareDraft.url;
+    $('sc-fav').textContent = (hostOf(shareDraft.url)[0] || '?').toUpperCase();
+    $('share-composer').style.display = 'block';
+    $('share-composer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    $('sc-submit').addEventListener('click', function () {
+      var err = $('sc-err');
+      err.textContent = '';
+      if (!CURRENT_USER) {
+        err.textContent = '共有にはログインが必要です。ログインしてからもう一度共有してください';
+        return;
+      }
+      var btn = $('sc-submit');
+      btn.disabled = true;
+      fetch('/api/sns/posts', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: 'site', url: shareDraft.url, title: shareDraft.title || '', text: '', via: 'browser' })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            try { localStorage.removeItem('tc_sns_draft'); } catch (e) {}
+            var okDiv = document.createElement('div');
+            okDiv.className = 'shared-ok';
+            okDiv.textContent = '✓ 共有しました！タイムラインに表示されています';
+            $('share-composer').replaceChild(okDiv, $('sc-submit').parentNode);
+            load();
+          } else {
+            btn.disabled = false;
+            err.textContent = (res.j && res.j.error) || '共有に失敗しました';
+          }
+        })
+        .catch(function () { btn.disabled = false; err.textContent = '共有に失敗しました'; });
+    });
+  }
+
+  // ---- 起動: セッション復元 → UI初期化 → タイムライン読み込み ----
+  if (typeof TC_ACCOUNT !== 'undefined' && typeof TC_ACCOUNT.restoreSession === 'function') {
+    try { await TC_ACCOUNT.restoreSession(); } catch (e) {}
+  }
+  if (typeof TC_ACCOUNT !== 'undefined') {
+    CURRENT_USER = TC_ACCOUNT.currentUser();
+    IS_DEV = typeof TC_ACCOUNT.isDev === 'function' && TC_ACCOUNT.isDev(CURRENT_USER);
+  }
+  // ヘッダーのアカウントチップ
+  (function () {
+    var chip = $('sns-me');
     if (!chip) return;
-    const av = document.getElementById('sns-me-avatar');
-    const nm = document.getElementById('sns-me-name');
-    if (!user) {
-      av.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-      nm.textContent = 'ログイン';
-      chip.href = '../index.html';
-      chip.title = 'ログインして投稿';
-      return;
-    }
-    if (user.icon) av.innerHTML = '<img src="' + user.icon + '" alt="">';
-    else av.textContent = (user.username || '?').slice(0, 2).toUpperCase();
-    nm.textContent = '@' + user.username;
+    var av = $('sns-me-avatar');
+    var nm = $('sns-me-name');
+    if (!CURRENT_USER) return;
+    if (CURRENT_USER.icon) av.innerHTML = '<img src="' + CURRENT_USER.icon + '" alt="">';
+    else av.textContent = (CURRENT_USER.username || '?').slice(0, 2).toUpperCase();
+    nm.textContent = '@' + CURRENT_USER.username;
     chip.removeAttribute('href');
     chip.style.cursor = 'default';
-    if (typeof TC_ACCOUNT.isDev === 'function' && TC_ACCOUNT.isDev(user.username)) {
-      const b = document.createElement('span');
+    if (IS_DEV) {
+      var b = document.createElement('span');
       b.className = 'dev-badge';
       b.textContent = '開発者';
       chip.insertBefore(b, nm);
     }
-  } catch (e) {}
+  })();
+  // 投稿フォーム / 未ログイン表示
+  if (CURRENT_USER) {
+    $('main-composer').style.display = 'block';
+    setupComposer();
+  } else {
+    $('login-notice').style.display = 'block';
+    $('fab').addEventListener('click', function () { location.href = '../index.html'; });
+  }
+  setupShare();
+  await load();
+
+  // 新着を自動反映（60秒ごと + タブ復帰時）
+  setInterval(function () {
+    if (document.visibilityState === 'visible') load();
+  }, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') load();
+  });
 })();
 </script>
 </body>

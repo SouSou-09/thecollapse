@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { attachChatServer, CHAT_WS_PATH } from "./static/worksheets/chatserver.js";
 import { attachAuthRoutes, getSessionUser } from "./auth.js";
+import { attachSnsRoutes } from "./sns.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
@@ -35,6 +36,8 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "1mb" }));
 // 認証 API（登録 / ログイン / ログアウト / me / update / delete）
 attachAuthRoutes(app);
+// SNS API（投稿 / いいね / 返信 / 削除）と Web Push（購読 / 通知送信）
+attachSnsRoutes(app);
 
 /* ── ユーザーデータファイルへの読み取り保護 ──────────────────
    static 配信より前に置き、/worksheets/data/ 配下の個人データファイルが

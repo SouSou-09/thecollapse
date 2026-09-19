@@ -379,6 +379,10 @@ nav {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       パニックボタン
     </div>
+    <div class="nav-item" onclick="showSection('notify', this)" id="nav-notify">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      通知
+    </div>
   </aside>
 
   <!-- コンテンツ -->
@@ -533,12 +537,60 @@ nav {
       <div class="setting-card">
         <div class="setting-info">
           <div class="setting-label">About Blank 移動先</div>
-          <div class="setting-desc">About Blank 起動時にリダイレクトするURLを設定します。</div>
+          <div class="setting-desc">ページ読み込み時に About Blank を開始するか設定します。</div>
         </div>
         <div class="setting-control">
           <input type="text" class="styled-input" id="ABCDirect" placeholder="https://...">
           <button class="save-btn" onclick="saveABCDirect()">保存</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 通知（v2.2.0 SNS） -->
+    <div id="section-notify" class="section" style="display:none">
+      <div class="section-title">通知</div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">プッシュ通知</div>
+          <div class="setting-desc" id="push-status">状態を確認中…</div>
+        </div>
+        <div class="setting-control">
+          <button class="save-btn" id="push-enable" onclick="enablePushFromSettings()">有効にする</button>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">アップデート通知</div>
+          <div class="setting-desc">デベロッパーがSNSにアップデートを投稿したときに通知します。</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="npref-update" onchange="saveNPrefs()">
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">おすすめサイト通知</div>
+          <div class="setting-desc">おすすめサイトがBrowserから共有されたときに通知します。</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="npref-site" onchange="saveNPrefs()">
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">改善案通知</div>
+          <div class="setting-desc">改善案が投稿されたときに通知します。（デベロッパーは既定でオン）</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="npref-improve" onchange="saveNPrefs()">
+          <div class="toggle-track"></div>
+        </label>
       </div>
     </div>
 
@@ -548,6 +600,7 @@ nav {
 <div class="toast" id="toast">✓ 保存しました</div>
 
 <script src="/worksheets/account.js"></script>
+<script src="/worksheets/push-client.js"></script>
 <script src="api/newloader.js"></script>
 <script src="api/settings.js"></script>
 <script src="api/abct.js"></script>
@@ -744,6 +797,66 @@ window.addEventListener('DOMContentLoaded', () => {
 
   applyCloak();
 });
+</script>
+<script>
+// ---- 通知設定（v2.2.0 SNS）----
+// プッシュ通知の有効化。ホーム画面に追加した端末（PWA standalone）でのみ機能する。
+async function enablePushFromSettings() {
+  const st = document.getElementById('push-status');
+  try {
+    if (typeof TC_PUSH === 'undefined') { st.textContent = 'この端末は通知に対応していません'; return; }
+    if (!TC_PUSH.isStandalone()) { st.textContent = 'ホーム画面に追加した状態でのみ通知を受け取れます'; return; }
+    const r = await TC_PUSH.subscribe();
+    if (r && r.ok) {
+      st.textContent = '✓ この端末でプッシュ通知を受け取ります';
+      document.getElementById('push-enable').style.display = 'none';
+    } else {
+      st.textContent = '通知を有効にできませんでした（' + ((r && r.reason) || 'エラー') + '）';
+    }
+  } catch (e) {
+    st.textContent = '通知の有効化に失敗しました';
+  }
+}
+
+// カテゴリごとの受信設定を保存（サーバー + ローカル）
+async function saveNPrefs() {
+  const prefs = {
+    update: document.getElementById('npref-update').checked,
+    site: document.getElementById('npref-site').checked,
+    improve: document.getElementById('npref-improve').checked,
+  };
+  try { localStorage.setItem('tc_push_prefs', JSON.stringify(prefs)); } catch (e) {}
+  if (typeof TC_PUSH !== 'undefined') await TC_PUSH.savePrefs(prefs);
+  showToast('通知設定を保存しました');
+}
+
+// 起動時: 既定値（一般=アップデート+おすすめサイト / デベロッパー=全て）で初期化
+(async function loadNPrefs() {
+  if (typeof TC_ACCOUNT !== 'undefined' && TC_ACCOUNT.restoreSession) {
+    try { await TC_ACCOUNT.restoreSession(); } catch (e) {}
+  }
+  let dev = false;
+  try { dev = TC_ACCOUNT.isDev(TC_ACCOUNT.currentUser()); } catch (e) {}
+  let prefs = { update: true, site: true, improve: dev };
+  const saved = (typeof TC_PUSH !== 'undefined') ? await TC_PUSH.loadPrefs() : null;
+  if (saved && saved.prefs) prefs = saved.prefs;
+  document.getElementById('npref-update').checked = !!prefs.update;
+  document.getElementById('npref-site').checked = !!prefs.site;
+  document.getElementById('npref-improve').checked = !!prefs.improve;
+
+  const st = document.getElementById('push-status');
+  const btn = document.getElementById('push-enable');
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || typeof TC_PUSH === 'undefined' || !TC_PUSH.isStandalone()) {
+    st.textContent = 'ホーム画面に追加した端末でのみ通知を受け取れます';
+  } else if (Notification.permission === 'granted') {
+    st.textContent = '✓ この端末で通知を受け取れます';
+    if (btn) btn.style.display = 'none';
+  } else if (Notification.permission === 'denied') {
+    st.textContent = 'ブラウザ設定で通知がブロックされています';
+  } else {
+    st.textContent = '「有効にする」を押して通知を許可してください';
+  }
+})();
 </script>
 <script>
 (async function(){

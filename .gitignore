@@ -1,6 +1,8 @@
 node_modules/
 # チャットのランタイム永続化データ
 static/worksheets/data/chat/
+# SNSのランタイム永続化データ（投稿・プッシュ購読・VAPID鍵）
+static/worksheets/data/sns/
 # サーバー側認証情報（パスワードハッシュ等の機微データ。配信・コミット禁止）
 auth-data/
 # ユーザーデータファイル（個人データ。サーバーが本人のみアクセス許可）
