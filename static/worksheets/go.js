@@ -147,6 +147,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         ['#bookmark-panel', 'bookmark'],
         ['#history-panel', 'history'],
         ['#more-options-panel', 'more'],
+        ['#ext-panel', 'ext'],
       ].forEach(([selector, key]) => {
         const panel = document.querySelector(selector);
         if (!panel || !panel.classList.contains('open')) return;
@@ -1254,6 +1255,12 @@ async function loadTabsFromStorage() {
 function toggleMoreOptions() {
   document.getElementById('more-options-panel').classList.toggle('open');
 }
+
+// ======= 拡張機能パネル（拡張機能ボタンで開閉） =======
+function toggleExtPanel() {
+  document.getElementById('ext-panel').classList.toggle('open');
+}
+window.toggleExtPanel = toggleExtPanel;
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1954,7 +1961,7 @@ document.addEventListener('click', e => {
   }
 });
 // ======= 拡張機能: 広告ブロック（β / v2.2.0） =======
-// Browserモードの下段ナビ（ブックマーク追加の左）の盾ボタンでON/OFFする。
+// ON/OFFは下段ナビの拡張機能ボタン（パズル）→ 拡張機能一覧パネルで行う。
 // 仕組み: iframe 内に広告を隠すCSSを注入し、既知の広告配信ドメインの
 // iframe / img / script 要素を除去する（軽量実装・今後強化予定）。
 const ADBLOCK_KEY = 'ext_adblock';
@@ -2018,10 +2025,11 @@ function toggleAdblock() {
 }
 
 function updateAdblockBtn() {
-  const btn = document.getElementById('ext-adblock-btn');
-  if (btn) btn.classList.toggle('ext-off', !adblockEnabled());
-  const st = document.getElementById('mo-adblock-state');
-  if (st) st.textContent = adblockEnabled() ? 'ON' : 'OFF';
+  const on = adblockEnabled();
+  const sw = document.getElementById('ext-switch-adblock');
+  if (sw) sw.classList.toggle('on', on);
+  const row = document.getElementById('ext-row-adblock');
+  if (row) row.classList.toggle('ext-off', !on);
 }
 window.toggleAdblock = toggleAdblock;
 updateAdblockBtn();

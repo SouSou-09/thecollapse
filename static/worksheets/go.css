@@ -1555,9 +1555,9 @@ body.ui-hidden #content-area {
   }
   /* ブックマーク追加は ⋯メニューの「このページをブックマーク」から実行可能 */
   #add-bookmark-btn { display: none; }
-  /* v2.2.0追加の拡張機能・共有ボタンも畳む（⋯メニューから実行）。
-     これがないと狭い画面でアドレスバーがほぼゼロ幅に潰れる。 */
-  #ext-btn-area, #share-btn { display: none; }
+  /* 共有ボタンは畳む（⋯メニューの「SNSに共有」から実行）。
+     拡張機能ボタンは1ボタンなので表示を維持し、パネルから各拡張機能をON/OFFする。 */
+  #share-btn { display: none; }
   /* 狭い画面でもタイトルが読めるように、タブは詰めすぎず横スクロールを許す
      （3枚までは収まり、4枚以上はスワイプで移動できる） */
   .strip-tab {
@@ -1588,12 +1588,62 @@ body.ui-hidden #content-area {
 #ext-btn-area { display: flex; align-items: center; gap: 4px; }
 #ext-btn-area:empty { display: none; }
 
-/* ── 拡張機能: 広告ブロック（β / v2.2.0）──────── */
-#ext-adblock-btn { position: relative; }
-#ext-adblock-btn.ext-off { opacity: .4; }
-.ext-beta-badge {
-  position: absolute; top: 1px; right: 1px;
-  font-size: 8px; line-height: 1; font-weight: 700;
-  padding: 1px 3px; border-radius: 4px;
+/* ── 拡張機能一覧パネル（拡張機能ボタンから開く）──────── */
+#ext-panel {
+  position: fixed;
+  bottom: calc(var(--bottom-bar-h) + var(--safe-bottom) + 8px);
+  left: 50%; transform: translateX(-50%);
+  width: 260px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 300;
+  display: none; flex-direction: column;
+  overflow: hidden; padding: 6px 0 8px;
+}
+#ext-panel.open { display: flex; }
+.ext-panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px 8px;
+  font-size: 13px; font-weight: 700; color: var(--muted); font-family: var(--font);
+}
+.ext-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: transparent; border: none;
+  color: var(--text); font-size: 14px; font-family: var(--font);
+  cursor: pointer; transition: background 0.1s;
+  text-align: left; width: 100%;
+}
+.ext-row:hover { background: var(--surface3); }
+.ext-row > svg { color: var(--muted); flex-shrink: 0; }
+.ext-row.ext-off { opacity: .55; }
+.ext-row-name { flex: 1; display: flex; align-items: center; gap: 6px; }
+.ext-badge-inline {
+  font-size: 9px; line-height: 1; font-weight: 700;
+  padding: 1px 4px; border-radius: 4px;
   background: #1d9bf0; color: #fff;
+}
+/* iOS風トグルスイッチ */
+.ext-switch {
+  position: relative; flex-shrink: 0;
+  width: 36px; height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.ext-switch::after {
+  content: ''; position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: transform 0.15s;
+}
+.ext-switch.on { background: #1d9bf0; }
+.ext-switch.on::after { transform: translateX(16px); }
+.ext-panel-note {
+  padding: 8px 16px 2px;
+  font-size: 11px; color: var(--muted); font-family: var(--font);
 }
