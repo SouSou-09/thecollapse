@@ -1273,6 +1273,8 @@ function positionExtPanel() {
   let left = r.left + r.width / 2 - w / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
   panel.style.left = left + 'px';
+  // パネルの下端をボタンの上端に4pxの隙間で接続（ボタンの実位置基準）
+  panel.style.bottom = (window.innerHeight - r.top + 4) + 'px';
 }
 window.addEventListener('resize', () => {
   const panel = document.getElementById('ext-panel');
@@ -2052,82 +2054,14 @@ function updateAdblockBtn() {
 window.toggleAdblock = toggleAdblock;
 updateAdblockBtn();
 
-// ======= 拡張機能: モモンガ コメント非表示（v2.2.0） =======
-// momon-ga.me（エロ漫画ギャラリー）の評価・感想コメントの表示を無効にする拡張機能。
-// 対象サイトかどうかは decodeProxyUrl() でプロキシURLを元URLに復号して判定し、
-// 判定できたフレームにだけコメント系要素を隠すCSSを注入する（他のサイトには無影響）。
-const MOMONGA_KEY = 'ext_momonga_hide_comments';
-const MOMONGA_URL_RE = /momon-ga\.me/i;
-const MOMONGA_COMMENT_CSS = [
-  '#comments', '.comments', '.comments-area', '.comment-list', '.comment-respond', '#respond',
-  '[id*="comment" i]', '[class*="comment" i]'
-].join(',');
-
-function momongaHideEnabled() { return localStorage.getItem(MOMONGA_KEY) !== 'false'; }
-
-function isMomongaFrame(frame) {
-  try {
-    if (MOMONGA_URL_RE.test(decodeProxyUrl(frame.getAttribute('src') || ''))) return true;
-    return MOMONGA_URL_RE.test(decodeProxyUrl((frame.contentWindow && frame.contentWindow.location.href) || ''));
-  } catch (e) { return false; }
-}
-
-function isMomongaDoc(doc) {
-  try {
-    const link = doc.querySelector('link[rel="canonical"]');
-    const meta = doc.querySelector('meta[property="og:url"]');
-    if (link && MOMONGA_URL_RE.test(link.href || '')) return true;
-    if (meta && MOMONGA_URL_RE.test(meta.content || '')) return true;
-  } catch (e) {}
-  return false;
-}
-
-function applyMomongaHide(frame) {
-  if (!frame || !momongaHideEnabled()) return;
-  try {
-    const doc = frame.contentDocument;
-    if (!doc || !doc.body || doc.getElementById('tc-momonga-comment-hide')) return;
-    if (!isMomongaFrame(frame) && !isMomongaDoc(doc)) return;
-    const st = doc.createElement('style');
-    st.id = 'tc-momonga-comment-hide';
-    st.textContent = MOMONGA_COMMENT_CSS + '{display:none!important;}';
-    (doc.head || doc.documentElement).appendChild(st);
-  } catch (e) { /* クロスオリジン等は無視 */ }
-}
-
-function removeMomongaHide(frame) {
-  try {
-    const st = frame.contentDocument && frame.contentDocument.getElementById('tc-momonga-comment-hide');
-    if (st) st.remove();
-  } catch (e) {}
-}
-
-function toggleMomongaHide() {
-  localStorage.setItem(MOMONGA_KEY, momongaHideEnabled() ? 'false' : 'true');
-  updateMomongaRow();
-  document.querySelectorAll('iframe.browser-frame').forEach(f => {
-    if (momongaHideEnabled()) { applyMomongaHide(f); return; }
-    removeMomongaHide(f);
-  });
-}
-
-function updateMomongaRow() {
-  const on = momongaHideEnabled();
-  const sw = document.getElementById('ext-switch-momonga');
-  if (sw) sw.classList.toggle('on', on);
-  const row = document.getElementById('ext-row-momonga');
-  if (row) row.classList.toggle('ext-off', !on);
-}
-window.toggleMomongaHide = toggleMomongaHide;
-updateMomongaRow();
 
 // 全ての拡張機能をiframeへまとめて適用する統一フック。onload直後はDOMが
 // 完全でないことが多いため、1.5秒後・4秒後にも再適用する。
 // （従来はタブ復元経路でしか呼ばれておらず、アドレスバーから開いた
 //   ページには一切適用されていなかった — v2.2.0で修正）
 function applyAllExtensions(frame) {
+  // 新しい拡張機能はここに追加する
   applyAdblock(frame);
-  applyMomongaHide(frame);
 }
 function scheduleExtensions(frame) {
   applyAllExtensions(frame);
