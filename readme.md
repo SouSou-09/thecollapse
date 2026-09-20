@@ -79,7 +79,7 @@ Newsの隣にSNSを追加しました。アップデート（デベロッパー�
 - 新式エンジン(/service3/)でページが必ず開けない問題を根本修正: SW側decodeUrlがorigin+prefixを剥がしきれずatobエラーになる不具合。configのdecodeUrlを「/service3/以降を取り出してからデコード」する耐性型に変更。iframeのallow属性から無効なfeature指定とallowfullscreen重複を除去。
 - 新式エンジン(/service3/)の残障を修正: SWがreferrer(アプリページのURL)までプロキシURLとしてbase64デコードしに行き、例外→500になる問題。decodeUrlを例外を出さない設計(デコード不能ならabout:blank)に変更。index.html側iframeのallow属性の無効指定も除去。
 - 新式エンジン(/service3/)の通信を完全接続: bare-muxのSharedWorker配信(/baremux/)とSWへのポート供給を実装し、トランスポート(bare v2プロトコル)を新設。トランスポートはpostMessageで複製可能なプレーンオブジェクトを返すよう修正(DataCloneError解消)。
-- bareサーバー経由の上流取得を常時identity(無圧縮)に統一し、圧縮レスポンスの素通しによる読み込み停止を防止。トランスポート読み込み時にコンソールへ [uv3] bare-transport v4 loaded を出力。
+- bareサーバー経由の上流取得のエンコーディングをgzipに統一(br/zstdを除外)し、UV SWが解凍できる形で応答。トランスポート読み込み時にコンソールへ [uv3] bare-transport v5 loaded を出力。
 ### その他
 
 - Renderに対応
