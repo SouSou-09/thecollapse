@@ -715,6 +715,11 @@ function navigateTab(tabId, query) {
   // どのサイトもアプリ内（ブラウザモード）のタブで開く。
   // 新しいブラウザタブや about:blank のウィンドウは開かない。
   if (typeof __uv$config === 'undefined') { return; }
+  if (enginePrefix() === '/service3/') { (async () => { try {
+    const { BareMuxConnection } = await import('/baremux/index.mjs');
+    const conn = new BareMuxConnection('/baremux/worker.js');
+    await conn.setTransport('/uv3/bare-transport.mjs', []);
+  } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(reg => _waitForSWActive(reg))
     .then(async () => {
@@ -819,6 +824,11 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
 // プロキシ経由ロードへのフォールバック
 function fallbackToProxy(tabId, url) {
   if (typeof __uv$config === 'undefined') return;
+  if (enginePrefix() === '/service3/') { (async () => { try {
+    const { BareMuxConnection } = await import('/baremux/index.mjs');
+    const conn = new BareMuxConnection('/baremux/worker.js');
+    await conn.setTransport('/uv3/bare-transport.mjs', []);
+  } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(async () => {
       const proxyUrl = await buildProxyUrl(url);

@@ -16,6 +16,7 @@ const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
 // v1（現行エンジン）のdist退避先と、v3用カスタムconfigの場所
 const uv1Path = fileURLToPath(new URL("./static/uv1/", import.meta.url));
 const uv3CustomPath = fileURLToPath(new URL("./static/uv3/", import.meta.url));
+const baremuxPath = fileURLToPath(new URL("./node_modules/@mercuryworkshop/bare-mux/dist/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
 const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
 const bare = createBareServer("/bare/", {});
@@ -175,6 +176,7 @@ app.get("/uv3/sw.js", (req, res) => {
 });
 app.use("/uv3/", express.static(uv3CustomPath));
 app.use("/uv3/", express.static(uvPath));
+app.use("/baremux/", express.static(baremuxPath));
 
 /* ── 簡易レートリミッタ (PUT /worksheets/data/:filename) ── */
 // 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の書き込み回数を制限する。
