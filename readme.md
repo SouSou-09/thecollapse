@@ -77,6 +77,7 @@ Newsの隣にSNSを追加しました。アップデート（デベロッパー�
 
 - エンジン切替・タブ復元時の符号方式不一致を根本修正: 復号結果の厳密なURL判定（印字ASCIIのみ）と再符号化によるround-trip検証を導入。壊れた保存URLはエラーページを開かず新規タブ扱いでスキップ。UV3バンドル取得を強化、PWAキャッシュをv13に更新。
 - 新式エンジン(/service3/)でページが必ず開けない問題を根本修正: SW側decodeUrlがorigin+prefixを剥がしきれずatobエラーになる不具合。configのdecodeUrlを「/service3/以降を取り出してからデコード」する耐性型に変更。iframeのallow属性から無効なfeature指定とallowfullscreen重複を除去。
+- 新式エンジン(/service3/)の残障を修正: SWがreferrer(アプリページのURL)までプロキシURLとしてbase64デコードしに行き、例外→500になる問題。decodeUrlを例外を出さない設計(デコード不能ならabout:blank)に変更。index.html側iframeのallow属性の無効指定も除去。
 ### その他
 
 - Renderに対応
