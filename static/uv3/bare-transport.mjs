@@ -12,7 +12,7 @@
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v6 loaded'); }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v7 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
@@ -35,6 +35,7 @@ export default class BareTransport {
     delete outHeaders['content-encoding'];
     delete outHeaders['content-length'];
     delete outHeaders['transfer-encoding'];
+    outHeaders['x-uv3-transport'] = 'v7';
     return {
       body: r.body,
       status,
