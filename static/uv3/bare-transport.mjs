@@ -6,7 +6,7 @@
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v3 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const h = {};
@@ -25,8 +25,17 @@ export default class BareTransport {
     let outHeaders = {};
     try { outHeaders = JSON.parse(r.headers.get('x-bare-headers') || '{}'); } catch (e) {}
     const status = Number(r.headers.get('x-bare-status')) || r.status;
+    let outBody = r.body;
+    const ce = String(outHeaders['content-encoding'] || '').toLowerCase();
+    if ((ce === 'gzip' || ce === 'deflate') && outBody) {
+      try {
+        outBody = outBody.pipeThrough(new DecompressionStream(ce));
+        delete outHeaders['content-encoding'];
+        delete outHeaders['content-length'];
+      } catch (e) {}
+    }
     return {
-      body: r.body,
+      body: outBody,
       status,
       statusText: r.headers.get('x-bare-status-text') || '',
       headers: outHeaders,

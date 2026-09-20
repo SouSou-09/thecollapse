@@ -178,6 +178,12 @@ app.use("/uv3/", express.static(uv3CustomPath));
 app.use("/uv3/", express.static(uvPath));
 app.use("/baremux/", express.static(baremuxPath));
 
+// bare経由の上流リクエストは常時identity(無圧縮)で取得する。
+// ブラウザは/bare/へのfetchにaccept-encoding: br/gzipを自動付与し(禁止ヘッダーで削除不可)、
+// bareサーバーがそれを上流に転送すると圧縮レスポンスが素通しし、
+// ページ側で文字化け・読み込み停止になるためここで上書きする。
+app.use("/bare/", (req, res, next) => { req.headers["accept-encoding"] = "identity"; next(); });
+
 /* ── 簡易レートリミッタ (PUT /worksheets/data/:filename) ── */
 // 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の書き込み回数を制限する。
 const _rlBucket = new Map(); // ip -> { count, resetAt }
