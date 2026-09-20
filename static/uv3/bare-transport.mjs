@@ -3,13 +3,16 @@
 // - x-bare-urlではなく x-bare-protocol/host/port/path の分解ヘッダーが必須
 //   (protocolは ['http:','https:','ws:','wss:'] のコロン付き)
 // - 上流へのメソッドは bareリクエスト自体のメソッドがそのまま使われる
-//   (requestUtil.js: method: request.method) ので、GETはGETで送ること。
-// ボディとヘッダーは上流応答をそのまま渡す（解凍はUV SW側の専用処理が行う）。
+//   (requestUtil.js: method: request.method)
+// ブラウザはfetch応答を自動解凍するため、ここで受け取るbodyは「解凍済み」。
+// 一方content-encoding/content-lengthヘッダは圧縮時の値のまま残るため、
+// 素通しすると「解凍済みbody+gzip宣言」の矛盾応答になりSW経由で壊れる。
+// → この2つは必ず除去して返す。UV SW自身は解凍を持たない(0実装)。
 // request()はpostMessageで複製可能なプレーンオブジェクト
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v5 loaded'); }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v6 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
@@ -29,6 +32,9 @@ export default class BareTransport {
     let outHeaders = {};
     try { outHeaders = JSON.parse(r.headers.get('x-bare-headers') || '{}'); } catch (e) {}
     const status = Number(r.headers.get('x-bare-status')) || r.status;
+    delete outHeaders['content-encoding'];
+    delete outHeaders['content-length'];
+    delete outHeaders['transfer-encoding'];
     return {
       body: r.body,
       status,

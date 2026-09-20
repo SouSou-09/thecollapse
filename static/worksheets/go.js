@@ -718,7 +718,7 @@ function navigateTab(tabId, query) {
   if (enginePrefix() === '/service3/') { (async () => { try {
     const { BareMuxConnection } = await import('/baremux/index.mjs');
     const conn = new BareMuxConnection('/baremux/worker.js');
-    await conn.setTransport('/uv3/bare-transport.mjs', []);
+    await conn.setTransport('/uv3/bare-transport.mjs?v=6', []);
   } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(reg => _waitForSWActive(reg))
@@ -827,7 +827,7 @@ function fallbackToProxy(tabId, url) {
   if (enginePrefix() === '/service3/') { (async () => { try {
     const { BareMuxConnection } = await import('/baremux/index.mjs');
     const conn = new BareMuxConnection('/baremux/worker.js');
-    await conn.setTransport('/uv3/bare-transport.mjs', []);
+    await conn.setTransport('/uv3/bare-transport.mjs?v=6', []);
   } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
   window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
     .then(async () => {
