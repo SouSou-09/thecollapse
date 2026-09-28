@@ -80,6 +80,7 @@ Newsの隣にSNSを追加しました。アップデート（デベロッパー�
 - 新式エンジン(/service3/)の残障を修正: SWがreferrer(アプリページのURL)までプロキシURLとしてbase64デコードしに行き、例外→500になる問題。decodeUrlを例外を出さない設計(デコード不能ならabout:blank)に変更。index.html側iframeのallow属性の無効指定も除去。
 - 新式エンジン(/service3/)の通信を完全接続: bare-muxのSharedWorker配信(/baremux/)とSWへのポート供給を実装し、トランスポート(bare v2プロトコル)を新設。トランスポートはpostMessageで複製可能なプレーンオブジェクトを返すよう修正(DataCloneError解消)。
 - bareサーバー経由の上流取得のエンコーディングをgzipに統一(br/zstdを除外)し、UV SWが解凍できる形で応答。トランスポート読み込み時にコンソールへ [uv3] bare-transport v6 loaded を出力。
+- 新式エンジン(/service3/)でCloudflare配下のサイトが必ず「400 Bad Request (cloudflare)」になる根本原因を修正: bareサーバーは上流へ送るHostヘッダーをx-bare-headersの`host`からしか設定しない(setHost:false)が、v3のUV SWは`host`を渡さないため、Hostヘッダー無しのリクエストになっていた。トランスポート(v8)で`host`を必ず付与し、さらにサーバー側でも欠落時に補完するよう修正。bare-muxワーカー/トランスポートを?v=8で再読み込み、PWAキャッシュv16。
 ### その他
 
 - Renderに対応
