@@ -184,6 +184,28 @@ app.use("/baremux/", express.static(baremuxPath));
 // ページ側で文字化け・読み込み停止になるためここで上書きする。
 app.use("/bare/", (req, res, next) => { req.headers["accept-encoding"] = "gzip"; next(); });
 
+// bare v2 のHTTPリクエストで x-bare-headers に host が無い場合はサーバー側で補完する。
+// bare-serverは上流へ setHost:false で送信するため、hostが無いとHostヘッダー無しの
+// リクエストになり、Cloudflare配下のサイトが 400 Bad Request を返す（UV v3で常に失敗していた原因）。
+// 古いトランスポートがキャッシュに残っていても動くよう、ここで防御的に付与する。
+function ensureBareHost(req) {
+  try {
+    const xh = req.headers["x-bare-headers"];
+    const host = req.headers["x-bare-host"];
+    if (typeof xh !== "string" || typeof host !== "string" || !host) return;
+    const json = JSON.parse(xh);
+    if (!json || typeof json !== "object" || Array.isArray(json)) return;
+    if (Object.keys(json).some((k) => k.toLowerCase() === "host")) return;
+    const proto = String(req.headers["x-bare-protocol"] || "");
+    const port = String(req.headers["x-bare-port"] || "");
+    const def = (proto === "https:" || proto === "wss:") ? "443" : "80";
+    json.host = port && port !== def ? `${host}:${port}` : host;
+    req.headers["x-bare-headers"] = JSON.stringify(json);
+  } catch {
+    // 不正なJSONは bare-server 側のバリデーションに任せる
+  }
+}
+
 /* ── 簡易レートリミッタ (PUT /worksheets/data/:filename) ── */
 // 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の書き込み回数を制限する。
 const _rlBucket = new Map(); // ip -> { count, resetAt }
@@ -299,6 +321,7 @@ const server = createServer();
 
 server.on("request", (req, res) => {
   if (bare.shouldRoute(req)) {
+    ensureBareHost(req);
     bare.routeRequest(req, res);
   } else {
     app(req, res);

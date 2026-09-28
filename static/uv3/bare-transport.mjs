@@ -8,16 +8,20 @@
 // 一方content-encoding/content-lengthヘッダは圧縮時の値のまま残るため、
 // 素通しすると「解凍済みbody+gzip宣言」の矛盾応答になりSW経由で壊れる。
 // → この2つは必ず除去して返す。UV SW自身は解凍を持たない(0実装)。
+// 【重要】bare-serverは上流へ setHost:false で送るため、x-bare-headersにhostが無いと
+// Hostヘッダー無しのHTTPリクエストになり、Cloudflare配下のサイトは必ず400 Bad Requestを返す。
+// v1のBareClientは自前でhostを付けていたが、v3(UV SW)は付けない → ここで必ず付与する。
 // request()はpostMessageで複製可能なプレーンオブジェクト
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v7 loaded'); }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v8 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
     const h = {};
     for (const [k, v] of Object.entries(headers || {})) h[String(k).toLowerCase()] = v;
+    h['host'] = u.host; // 非デフォルトポートも含む(例 example.com:8080)
     const r = await fetch(this.base + 'v2/', {
       method: m,
       headers: {
@@ -35,7 +39,7 @@ export default class BareTransport {
     delete outHeaders['content-encoding'];
     delete outHeaders['content-length'];
     delete outHeaders['transfer-encoding'];
-    outHeaders['x-uv3-transport'] = 'v7';
+    outHeaders['x-uv3-transport'] = 'v8';
     return {
       body: r.body,
       status,
