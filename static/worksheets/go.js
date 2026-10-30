@@ -52,6 +52,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   _showLoading('読み込み中...');
 
+  // ブラウザにストレージの永続化を依頼（Cookie/IndexedDBが自動削除されにくくなる）
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
+  // 「保存しない」設定のサイトのCookieは、ブラウザを閉じた後の最初の起動時に削除する
+  try { if (typeof TC_COOKIES !== 'undefined') await TC_COOKIES.purgeSessionCookiesOnce(); } catch {}
+
   try {
     // アカウント復元
     if (typeof TC_ACCOUNT !== 'undefined') {
@@ -77,6 +82,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     // セッションから最初のURL取得
     const initialURL = sessionStorage.getItem('uvURL');
     sessionStorage.removeItem('uvURL');
+
+    // プロキシのService Workerを先に有効化しておく。
+    // これをしないと、復元したタブのiframeが「Cannot GET /service/...」になる
+    // （新しい端末・SW未登録の状態でタブを復元すると必ず発生していた）。
+    _showLoading('プロキシを準備しています...');
+    try { await _withTimeout(ensureProxyReady(), 8000, 'ensureProxyReady'); } catch (e) {
+      try { console.warn('[go] ensureProxyReady timeout/fail:', e && e.message); } catch {}
+    }
 
     // 保存されたタブを復元、なければ新規
     _showLoading('タブを復元しています...');
@@ -153,8 +166,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     } else if (tabs.length === 0) {
       createTab(null, false); // ニュータブ
     } else {
-      // 最後のアクティブタブを表示
-      const lastActive = tabs[tabs.length - 1];
+      // 前回アクティブだったタブを表示（無ければ最後のタブ）
+      const lastActive = tabs.find(t => t.id === _restoredActiveId) || tabs[tabs.length - 1];
       setActiveTab(lastActive.id);
     }
 
@@ -175,6 +188,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         ['#history-panel', 'history'],
         ['#more-options-panel', 'more'],
         ['#ext-panel', 'ext'],
+        ['#cookie-panel', 'cookie'],
       ].forEach(([selector, key]) => {
         const panel = document.querySelector(selector);
         if (!panel || !panel.classList.contains('open')) return;
@@ -231,8 +245,16 @@ function createTab(url, switchTo = true) {
   return id;
 }
 
+// 復元タブは表示するまでiframeを作らない（全タブが同時に読み込まれて重くなるのを防ぐ）
+function ensureTabLoaded(tab) {
+  if (!tab || !tab.lazy) return;
+  tab.lazy = false;
+  renderTabContent(tab);
+}
+
 function setActiveTab(id) {
   activeTabId = id;
+  ensureTabLoaded(tabs.find(t => t.id === id));
   // タブUI更新（旧タブ一覧の .tab）
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', parseInt(t.dataset.id) === id);
@@ -253,6 +275,7 @@ function setActiveTab(id) {
     if (document.getElementById('elements-panel')?.classList.contains('open')) {
       setTimeout(_elemInspectActive, 100);
     }
+    saveTabsToStorage(); // 「今見ているタブ」も保存する
   }
 }
 
@@ -454,8 +477,14 @@ function renderTabContent(tab) {
 
 function onFrameLoad(tabId, iframe) {
   try {
-    // iframeのURLを取得して表示URL更新
-    const src = iframe.src;
+    // iframeの「現在の」URLを取得して表示URL更新。
+    // iframe.src は最初に指定したURLのままで、リンク遷移後は古いページを指してしまう
+    // （履歴に同じページが二重に記録され、タブ復元も前のページに戻っていた）。
+    let src = iframe.src;
+    try {
+      const cur = iframe.contentWindow.location.href;
+      if (cur && cur !== 'about:blank') src = cur;
+    } catch {}
     const decoded = decodeProxyUrl(src);
     const tab = tabs.find(t => t.id === tabId);
     if (tab) {
@@ -492,8 +521,12 @@ function onFrameLoad(tabId, iframe) {
 function decodeProxyUrl(src) {
   if (!src) return '';
   try {
-    if (src.indexOf('/service3/') === 0 && window.UV3) {
-      try { return window.UV3.codec.base64.decode(src.slice('/service3/'.length)); } catch (e) {}
+    const i3 = src.indexOf('/service3/');
+    if (i3 >= 0 && window.UV3) {
+      // フルURL(http://host/service3/xxx)でも相対(/service3/xxx)でも復号する
+      let rest = src.slice(i3 + '/service3/'.length).split('#')[0];
+      const q = rest.indexOf('?'); if (q >= 0) rest = rest.slice(0, q);
+      try { return window.UV3.codec.base64.decode(rest); } catch (e) {}
     }
     if (src.includes('/service/') && typeof __uv$config !== 'undefined') {
       const encoded = src.split('/service/')[1];
@@ -715,13 +748,7 @@ function navigateTab(tabId, query) {
   // どのサイトもアプリ内（ブラウザモード）のタブで開く。
   // 新しいブラウザタブや about:blank のウィンドウは開かない。
   if (typeof __uv$config === 'undefined') { return; }
-  if (enginePrefix() === '/service3/') { (async () => { try {
-    const { BareMuxConnection } = await import('/baremux/index.mjs');
-    const conn = new BareMuxConnection('/baremux/worker.js?v=8');
-    await conn.setTransport('/uv3/bare-transport.mjs?v=8', []);
-  } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
-  window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
-    .then(reg => _waitForSWActive(reg))
+  ensureProxyReady()
     .then(async () => {
       const proxyUrl = await buildProxyUrl(url);
       const tab = tabs.find(t => t.id === tabId);
@@ -824,12 +851,7 @@ function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
 // プロキシ経由ロードへのフォールバック
 function fallbackToProxy(tabId, url) {
   if (typeof __uv$config === 'undefined') return;
-  if (enginePrefix() === '/service3/') { (async () => { try {
-    const { BareMuxConnection } = await import('/baremux/index.mjs');
-    const conn = new BareMuxConnection('/baremux/worker.js?v=8');
-    await conn.setTransport('/uv3/bare-transport.mjs?v=8', []);
-  } catch (e) { console.warn('[go] bare-mux init failed', e); } })(); }
-  window.navigator.serviceWorker.register(engineSWUrl(), { scope: enginePrefix() })
+  ensureProxyReady()
     .then(async () => {
       const proxyUrl = await buildProxyUrl(url);
       const tab = tabs.find(t => t.id === tabId);
@@ -859,6 +881,30 @@ function fallbackToProxy(tabId, url) {
     }).catch(err => console.error(err));
 }
 
+
+// プロキシ(Service Worker)を使える状態にする。エンジン別にSW登録→有効化まで待つ。
+// v3エンジンはbare-muxのトランスポートも設定する。広告ブロックのON/OFFもSWへ伝える。
+const _proxyReady = {};
+function ensureProxyReady() {
+  const prefix = enginePrefix();
+  if (_proxyReady[prefix]) return _proxyReady[prefix];
+  const p = (async () => {
+    if (prefix === '/service3/') {
+      try {
+        const { BareMuxConnection } = await import('/baremux/index.mjs');
+        const conn = new BareMuxConnection('/baremux/worker.js?v=8');
+        await conn.setTransport('/uv3/bare-transport.mjs?v=8', []);
+      } catch (e) { console.warn('[go] bare-mux init failed', e); }
+    }
+    const reg = await navigator.serviceWorker.register(engineSWUrl(), { scope: prefix });
+    await _waitForSWActive(reg);
+    try { syncAdblockToSW(); } catch (e) {}
+    return reg;
+  })();
+  _proxyReady[prefix] = p;
+  p.catch(() => { delete _proxyReady[prefix]; });
+  return p;
+}
 
 // サービスワーカーが「有効(activated)」になるまで待つ。
 // 有効になる前にプロキシ iframe を作ると、その読み込みが SW に横取りされず
@@ -1103,7 +1149,15 @@ function addHistoryEntry({ title, url, favicon }) {
   // 同じURLでも毎回の訪問を記録（Chrome/Edgeと同じ挙動）
   // ただし直前の項目と完全に同じURL・かつ5秒以内のリロード等は除外
   const last = hist[0];
-  if (last && last.url === url && (Date.now() - last.time) < 5000) return;
+  if (last && last.url === url && (Date.now() - last.time) < 5000) {
+    // 読み込み中はタイトルがURLのままのことがある。後からタイトルが取れたら更新する
+    if (title && title !== url && last.title !== title) {
+      last.title = title;
+      if (favicon && !last.favicon) last.favicon = favicon;
+      saveHistory(hist);
+    }
+    return;
+  }
   hist.unshift({ title: title || url, url, favicon: favicon || '', time: Date.now() });
   if (hist.length > HISTORY_MAX) hist = hist.slice(0, HISTORY_MAX);
   saveHistory(hist);
@@ -1250,39 +1304,61 @@ function formatTime(ts) {
 }
 
 // ======= 永続化 =======
+let _lastCookieSave = 0;
 function saveTabsToStorage() {
   const data = tabs.map(t => ({ id: t.id, title: t.title, url: t.url, displayUrl: t.displayUrl, favicon: t.favicon, isNew: t.isNew }));
   try {
     localStorage.setItem('tc_tabs', JSON.stringify(data));
     localStorage.setItem('tc_tabCounter', tabCounter);
+    if (activeTabId != null) localStorage.setItem('tc_activeTab', activeTabId);
     if (typeof TC_ACCOUNT !== 'undefined') {
-      TC_ACCOUNT.saveTabs(data, tabCounter);
-      if (TC_ACCOUNT.currentUser()) TC_ACCOUNT.saveCookies();
+      TC_ACCOUNT.saveTabs(data, tabCounter, activeTabId);
+      // Cookieの全件読み出しは重いので、保存は5秒に1回までに間引く
+      if (TC_ACCOUNT.currentUser() && Date.now() - _lastCookieSave > 5000) {
+        _lastCookieSave = Date.now();
+        TC_ACCOUNT.saveCookies();
+      }
     }
   } catch {}
 }
 
+let _restoredActiveId = null;
 async function loadTabsFromStorage() {
   try {
-    let saved = [], counter = 0;
+    let saved = [], counter = 0, activeId = null;
     if (typeof TC_ACCOUNT !== 'undefined') {
       const d = await TC_ACCOUNT.getTabs();
-      saved = d.tabs; counter = d.counter;
+      saved = d.tabs || []; counter = d.counter || 0; activeId = d.activeId;
       // 同時にブックマーク・履歴もキャッシュ
       await _syncBookmarks();
       await _syncHistory();
     } else {
       saved = JSON.parse(localStorage.getItem('tc_tabs') || '[]');
       counter = parseInt(localStorage.getItem('tc_tabCounter') || '0');
+      const a = localStorage.getItem('tc_activeTab'); activeId = a == null ? null : parseInt(a);
     }
+    if (!Array.isArray(saved)) saved = [];
     tabCounter = counter;
-    if (saved.length > 0) {
-      saved.forEach(t => {
-        tabs.push(t);
-        renderTabs();
-        renderTabContent(t);
-      });
+    _restoredActiveId = activeId;
+    for (const t of saved) {
+      if (!t || typeof t.id !== 'number') continue;
+      tabCounter = Math.max(tabCounter, t.id);
+      if (!t.isNew) {
+        // 保存時のエンジン/オリジンに依存しないよう、元のURLから現在のエンジンの符号で張り直す
+        let display = t.displayUrl;
+        if (!display || !/^https?:\/\//i.test(display)) display = decodeProxyUrl(t.url);
+        if (/^https?:\/\/[!-~]+$/i.test(display || '')) {
+          t.displayUrl = display;
+          try { t.url = await buildProxyUrl(display); } catch {}
+        } else {
+          // 壊れた保存URLはニュータブとして復元（エラーページを出さない）
+          t.url = null; t.isNew = true; t.displayUrl = '';
+        }
+      }
+      t.lazy = true; // 表示するときにiframeを作る
+      tabs.push(t);
     }
+    renderTabs();
   } catch {}
 }
 
@@ -2110,72 +2186,28 @@ document.addEventListener('click', e => {
 // CSSの属性セレクタ [src*="ドメイン"] では一切一致しない（v2.2.0で根本修正）。
 // 動的に注入される広告も MutationObserver で監視して非表示にする。
 const ADBLOCK_KEY = 'ext_adblock';
-const AD_CSS_SELECTOR = [
-  // AdSense / Google Publisher Tag
-  'ins.adsbygoogle', 'ins[data-ad-slot]', '[data-ad-client]',
-  '[id^="google_ads"]', '[id^="div-gpt-ad"]', '[id^="aswift"]', '[id^="gpt_unit"]',
-  'iframe[id^="google_ads_iframe"]', '[data-google-query-id]',
-  // Taboola / Outbrain
-  '[id^="taboola-"]', '[class*="taboola"]', '[class*="outbrain"]', '[id^="outbrain"]', '.OUTBRAIN',
-  // 広告クラス/IDのトークン（先頭・トークン境界のみに一致させ "read-" 等の誤爆を防ぐ）
-  '[class^="ad-"]', '[class*=" ad-"]', '[id^="ad-"]', '[id*=" ad-"]',
-  '[class*="adsbygoogle"]', '[class*="advert"]', '[class*="AdSlot"]', '[class*="adbox" i]',
-  // ポップアップ / 割り込み広告
-  '[class*="popunder"]', '[id*="popunder"]', '[class*="interstitial"]', '[id*="interstitial"]',
-  'amp-ad', 'amp-embed', 'amp-fx-flying-carpet',
-  // URL根拠の判定（広告ドメイン・パス・アフィリエイトリンク）はJS側で復号して行う
-  // （プロキシがURLをエンコードするため属性セレクタでは一致しない）
-  // 汎用の広告ラベル
-  '[aria-label*="advertisement" i]', '[title*="advertisement" i]',
-  // 広告コンテナで頻出するクラス・ID（アダルトサイトのウィジェット含む）
-  '[class*="exoclick"]', '[id*="exoclick"]',
-  '[class*="adbanner" i]', '[id*="adbanner" i]',
-  '[class*="ad-slot" i]', '[id*="ad-slot" i]', '[class*="adslot" i]', '[id*="adslot" i]',
-  '[class*="clickunder"]', '[id*="clickunder"]',
-  '[class*="preroll"]', '[id*="preroll"]',
-  '[class*="overlay-ad"]', '[id*="overlay-ad"]',
-  '[class*="sponsor"]', '[id*="sponsor"]',
-  // アフィリエイト等の広告リンクもJS側のURL判定で非表示にする
-  // WordPress系まとめサイト（エロ漫画まとめ等）の広告コンテナ
-  '[class*="ad-wrap"]', '[class*="ad-area"]', '[class*="ad-box"]', '[class*="ad-space"]',
-  '[class*="ad-label"]', '[class*="adsense"]', '[id*="adsense"]', '[class*="my-ad"]',
-  '[class*="post-ad"]', '[class*="article-ad"]', '[class*="entry-ad"]', '[class*="single-ad"]',
-  '[id*="ad-wrap"]', '[id*="ad-area"]', '[id*="ad-box"]'
-].join(',');
-// 既知の広告配信ドメイン（URL一致はJS側で復号して照合する）
-const AD_URL_DOMAINS = [
-  'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice', 'amazon-adsystem',
-  'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr', 'bidswitch', 'sharethrough',
-  '33across', 'criteo', 'taboola', 'outbrain', 'mgid', 'revcontent', 'propellerads',
-  'propellerclick', 'propellertracking', 'adsterra', 'exoclick', 'exdynsrv', 'magsrv',
-  'realsrv', 'hilltopads', 'popads', 'popcash', 'popmyads', 'trafficfactory', 'trafficjunky',
-  'trafficstars', 'tsyndicate', 'juicyads', 'plugrush', 'ero-advertising', 'eroadvertising',
-  'clickadu', 'zeropark', 'admaven', 'ad-maven', 'galaksion', 'adspyglass', 'adcash',
-  'aducdn', 'onclickads', 'onclckds', 'adsupply', 'adsco.re', 'evaadm', 'evadav',
-  'waframedia', 'smartadserver', 'openx.net', 'teads.tv', 'media.net', 'moatads',
-  'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin', 'vungle', 'inmobi',
-  'startapp', 'adskeeper', 'dditscdn', 'badoink', 'stripcash',
-  // 日本のまとめサイト系（裏広告 / 出会い系 / 広告リンク短縮）
-  'pcmax', 'happymail', 'wakuwaku', 'i2i.jp', 'zucks', 'adf.ly'
-];
+// ルール本体は adblock-rules.js（SWと共有）。ここでは参照するだけ。
+const AD_CSS_SELECTOR = (window.TC_AD_RULES && window.TC_AD_RULES.cssSelector) || 'ins.adsbygoogle';
 function adblockEnabled() { return localStorage.getItem(ADBLOCK_KEY) !== 'false'; }
 
-// 属性値を復号して広告ドメインと照合する（生の値も両方見る）
+// 属性値を復号して広告かどうか判定する（共通ルール TC_AD_RULES を使用）
 function _adIsAdUrl(u, cfg) {
   if (!u) return false;
+  const R = window.TC_AD_RULES;
+  if (!R) return false;
   let dec = null;
   try {
     const prefix = (cfg && cfg.prefix) || '/service/';
-    if (cfg && cfg.decodeUrl && String(u).indexOf(prefix) === 0) {
-      dec = String(cfg.decodeUrl(String(u).slice(prefix.length)) || '');
+    let v = String(u);
+    const i = v.indexOf(prefix);
+    if (cfg && cfg.decodeUrl && i >= 0) {
+      let rest = v.slice(i + prefix.length).split('#')[0];
+      dec = String(cfg.decodeUrl(rest) || '');
     }
   } catch (e) {}
-  const raw = String(u).toLowerCase();
-  const d = (dec || '').toLowerCase();
-  for (let i = 0; i < AD_URL_DOMAINS.length; i++) {
-    const dom = AD_URL_DOMAINS[i];
-    if (raw.indexOf(dom) !== -1 || (d && d.indexOf(dom) !== -1)) return true;
-  }
+  if (dec && R.urlBlocked(dec)) return true;
+  // プロキシ化されていない生のURL（data-src など）
+  if (/^https?:\/\//i.test(String(u)) && R.urlBlocked(String(u))) return true;
   return false;
 }
 
@@ -2208,6 +2240,8 @@ function _adTeardown(frame) {
   try {
     const doc = frame.contentDocument;
     if (!doc) return;
+    const swSt = doc.getElementById('tc-adblock-sw');
+    if (swSt) swSt.remove();
     const st = doc.getElementById('tc-adblock-style');
     if (!st) return;
     (st.__hidden || []).forEach(h => {
@@ -2259,8 +2293,19 @@ function applyAdblock(frame) {
   } catch (e) { /* クロスオリジン等はβでは無視 */ }
 }
 
+// ON/OFF をプロキシのService Workerへ伝える（SW側で通信遮断・早期CSS注入を切り替える）
+function syncAdblockToSW() {
+  const msg = { type: 'tc-adblock', enabled: adblockEnabled() };
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => { const w = r.active || r.waiting || r.installing; if (w) { try { w.postMessage(msg); } catch (e) {} } });
+  }).catch(() => {});
+}
+window.syncAdblockToSW = syncAdblockToSW;
+
 function toggleAdblock() {
   localStorage.setItem(ADBLOCK_KEY, adblockEnabled() ? 'false' : 'true');
+  syncAdblockToSW();
   updateAdblockBtn();
   document.querySelectorAll('iframe.browser-frame').forEach(f => {
     if (adblockEnabled()) { applyAdblock(f); return; }
@@ -2328,3 +2373,62 @@ function shareToSNS() {
   window.open('/worksheets/sns.html?share=1', '_blank');
 }
 window.shareToSNS = shareToSNS;
+
+
+// ======= Cookie: サイト別の保存設定（v2.3.0） =======
+// 'save' = 端末に残す（ログイン中はアカウントにも同期） / 'session' = ブラウザを閉じると削除
+function _activeSiteHost() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  const u = tab && !tab.isNew ? (tab.displayUrl || decodeProxyUrl(tab.url)) : '';
+  try { return new URL(u).hostname; } catch { return ''; }
+}
+async function renderCookiePanel() {
+  const host = _activeSiteHost();
+  const base = host ? TC_COOKIES.baseDomain(host) : '';
+  const siteEl = document.getElementById('ck-site');
+  const countEl = document.getElementById('ck-count');
+  const noteEl = document.getElementById('ck-note');
+  const seg = document.getElementById('ck-seg');
+  if (!siteEl) return;
+  siteEl.textContent = base || '（サイトが開かれていません）';
+  seg.style.opacity = base ? '' : '.4';
+  seg.style.pointerEvents = base ? '' : 'none';
+  const pol = TC_COOKIES.getPolicy();
+  const own = base ? pol.sites[base] : null;
+  seg.querySelectorAll('button').forEach(b => {
+    const m = b.dataset.mode;
+    b.classList.toggle('on', m === 'default' ? !own : own === m);
+  });
+  const eff = base ? (own || pol.default) : pol.default;
+  noteEl.textContent = own ? '' : '既定: ' + (pol.default === 'save' ? '保存する' : '保存しない') + '（設定ページで変更）';
+  noteEl.title = eff;
+  try {
+    const map = await TC_COOKIES.listSites();
+    countEl.textContent = base ? ('保存中のCookie: ' + (map.get(base) || 0) + '件') : '';
+  } catch { countEl.textContent = ''; }
+}
+function toggleCookiePanel() {
+  const panel = document.getElementById('cookie-panel');
+  const open = panel.classList.toggle('open');
+  if (open) renderCookiePanel();
+}
+async function setCookieModeForSite(mode) {
+  const host = _activeSiteHost();
+  if (!host) return;
+  TC_COOKIES.setSitePolicy(host, mode);
+  // 「保存する」へ変えたら今ある分もアカウントへ同期する
+  try { if (TC_ACCOUNT.currentUser()) await TC_ACCOUNT.saveCookies(); } catch {}
+  renderCookiePanel();
+}
+async function deleteCookiesForSite() {
+  const host = _activeSiteHost();
+  if (!host) return;
+  if (!confirm(TC_COOKIES.baseDomain(host) + ' のCookieを削除しますか？\n（このサイトのログインが解除される場合があります）')) return;
+  await TC_COOKIES.deleteSite(host);
+  try { if (TC_ACCOUNT.currentUser()) await TC_ACCOUNT.saveCookies(); } catch {}
+  renderCookiePanel();
+  if (typeof addLog === 'function') addLog('Cookieを削除しました: ' + TC_COOKIES.baseDomain(host), 'ok');
+}
+window.toggleCookiePanel = toggleCookiePanel;
+window.setCookieModeForSite = setCookieModeForSite;
+window.deleteCookiesForSite = deleteCookiesForSite;

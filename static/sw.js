@@ -1,6 +1,8 @@
 importScripts('/worksheets/uv/uv.bundle.js');
 importScripts('/worksheets/uv/uv.config.js');
 importScripts('/worksheets/uv/uv.sw.js');
+importScripts('/worksheets/adblock-rules.js');
+importScripts('/worksheets/adblock-sw.js');
 
 const sw = new UVServiceWorker();
 
@@ -21,8 +23,9 @@ self.addEventListener('activate', event => {
     );
 });
 
+// 広告ブロック(v2.3.0): 広告URLの通信遮断とHTMLへの早期CSS注入をSW内で行う
 self.addEventListener('fetch', event =>
     event.respondWith(
-        sw.fetch(event)
+        self.TCAdblock.wrap(event, () => sw.fetch(event), { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl })
     )
 );

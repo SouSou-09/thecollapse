@@ -172,7 +172,9 @@ app.use("/uv/", express.static(uv1Path));
 // 既存の /service/（v1.0.11・static/uv1 に退避済み）は一切変更しない。
 app.get("/uv3/sw.js", (req, res) => {
   res.setHeader("Service-Worker-Allowed", "/service3/");
-  res.sendFile(uvPath + "/sw.js");
+  res.setHeader("Cache-Control", "no-cache");
+  // 広告ブロック対応のカスタムSW（標準の dist/sw.js に広告ブロックを追加したもの）
+  res.sendFile(uv3CustomPath + "sw.js");
 });
 app.use("/uv3/", express.static(uv3CustomPath));
 app.use("/uv3/", express.static(uvPath));

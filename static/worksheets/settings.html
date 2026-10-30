@@ -366,6 +366,10 @@ nav {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       Ultraviolet
     </div>
+    <div class="nav-item" onclick="showSection('cookie', this)" id="nav-cookie">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a4 4 0 0 0 5 5 4 4 0 0 0 4.8 4.8z"/><circle cx="8.5" cy="12" r="1"/><circle cx="12" cy="16" r="1"/><circle cx="14" cy="11" r="1"/></svg>
+      Cookie
+    </div>
     <div class="nav-item" onclick="showSection('search', this)" id="nav-search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       検索エンジン
@@ -422,6 +426,51 @@ nav {
   </div>
 </div>
 
+
+
+    <!-- Cookie -->
+    <div id="section-cookie" class="section" style="display:none">
+      <div class="section-title">Cookie</div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">既定の保存方法</div>
+          <div class="setting-desc">サイト別の指定がないサイトのCookie（ログイン状態など）をどう扱うかを決めます。「保存しない」にすると、ブラウザを閉じたあとの最初の起動時にCookieが削除されます。ログイン中は「保存する」サイトのCookieがアカウントにも同期されます。</div>
+        </div>
+        <div class="setting-control">
+          <select class="styled-select" id="ck-default" onchange="ckSetDefault(this.value)">
+            <option value="save">保存する</option>
+            <option value="session">保存しない（閉じると削除）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-card" style="flex-direction:column;align-items:stretch;gap:12px">
+        <div class="setting-info">
+          <div class="setting-label">サイト別の設定</div>
+          <div class="setting-desc">サイトごとに「保存する / 保存しない」を選べます。ブラウザ画面の「その他」→「Cookie」からも、開いているサイトに対して変更できます。</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="text" class="styled-input" id="ck-new-site" placeholder="example.com" style="flex:1;min-width:160px">
+          <select class="styled-select" id="ck-new-mode">
+            <option value="save">保存する</option>
+            <option value="session">保存しない</option>
+          </select>
+          <button class="save-btn" onclick="ckAddSite()">追加</button>
+        </div>
+        <div id="ck-sites" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-info">
+          <div class="setting-label">すべてのCookieを削除</div>
+          <div class="setting-desc">この端末に保存されているプロキシ経由のCookieをすべて削除します（各サイトのログインが解除されます）。</div>
+        </div>
+        <div class="setting-control">
+          <button class="save-btn" onclick="ckDeleteAll()">削除</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 検索エンジン -->
     <div id="section-search" class="section" style="display:none">
@@ -893,6 +942,62 @@ async function saveNPrefs() {
     try { localStorage.setItem('dev_engine', sel.value); } catch (e) {}
     if (typeof showToast === 'function') showToast('保存しました（再読み込みで反映されます）');
   });
+})();
+</script>
+<script>
+(function(){
+  if (typeof TC_COOKIES === 'undefined') return;
+  var esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  window.ckRender = async function(){
+    var pol = TC_COOKIES.getPolicy();
+    document.getElementById('ck-default').value = pol.default;
+    var counts = await TC_COOKIES.listSites();
+    var hosts = new Set(Object.keys(pol.sites));
+    counts.forEach(function(_, k){ hosts.add(k); });
+    var box = document.getElementById('ck-sites');
+    if (!hosts.size) { box.innerHTML = '<div class="setting-desc">まだ保存されたCookieはありません。</div>'; return; }
+    box.innerHTML = Array.from(hosts).sort().map(function(h){
+      var own = pol.sites[h] || '';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px">' +
+        '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;word-break:break-all">' + esc(h) + '</div>' +
+        '<div class="setting-desc" style="margin:0">' + (counts.get(h)||0) + '件</div></div>' +
+        '<select class="styled-select" data-host="' + esc(h) + '" onchange="ckSetSite(this)">' +
+        '<option value=""' + (own===''?' selected':'') + '>既定に従う</option>' +
+        '<option value="save"' + (own==='save'?' selected':'') + '>保存する</option>' +
+        '<option value="session"' + (own==='session'?' selected':'') + '>保存しない</option></select>' +
+        '<button class="save-btn" data-host="' + esc(h) + '" onclick="ckDeleteSite(this)">削除</button></div>';
+    }).join('');
+  };
+  window.ckSetDefault = function(v){ TC_COOKIES.setDefault(v); showToast('Cookieの既定を保存しました'); };
+  window.ckSetSite = async function(el){
+    TC_COOKIES.setSitePolicy(el.dataset.host, el.value || null);
+    try { if (TC_ACCOUNT.currentUser()) await TC_ACCOUNT.saveCookies(); } catch(e){}
+    showToast('保存しました'); ckRender();
+  };
+  window.ckAddSite = function(){
+    var v = document.getElementById('ck-new-site').value.trim().replace(/^https?:\/\//i,'').split('/')[0];
+    if (!v) return;
+    TC_COOKIES.setSitePolicy(v, document.getElementById('ck-new-mode').value);
+    document.getElementById('ck-new-site').value = '';
+    showToast('追加しました'); ckRender();
+  };
+  window.ckDeleteSite = async function(el){
+    if (!confirm(el.dataset.host + ' のCookieを削除しますか？')) return;
+    await TC_COOKIES.deleteSite(el.dataset.host);
+    try { if (TC_ACCOUNT.currentUser()) await TC_ACCOUNT.saveCookies(); } catch(e){}
+    showToast('削除しました'); ckRender();
+  };
+  window.ckDeleteAll = async function(){
+    if (!confirm('すべてのCookieを削除しますか？各サイトのログインが解除されます。')) return;
+    await TC_COOKIES.deleteAll();
+    try { if (TC_ACCOUNT.currentUser()) await TC_ACCOUNT.saveCookies(); } catch(e){}
+    showToast('すべて削除しました'); ckRender();
+  };
+  // アカウントのポリシーを取り込んでから描画
+  (async function(){
+    try { if (TC_ACCOUNT.restoreSession) { await TC_ACCOUNT.restoreSession(); await TC_ACCOUNT.restoreCookies(); } } catch(e){}
+    ckRender();
+  })();
 })();
 </script>
 </body>
