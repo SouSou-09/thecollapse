@@ -1589,7 +1589,7 @@ body.ui-hidden #content-area {
 #ext-btn-area:empty { display: none; }
 
 /* ── 拡張機能一覧パネル（拡張機能ボタンから開く）──────── */
-#ext-panel {
+#ext-panel, #cookie-panel {
   position: fixed;
   bottom: calc(var(--bottom-bar-h) + var(--safe-bottom) + 8px);
   width: 260px;
@@ -1601,7 +1601,7 @@ body.ui-hidden #content-area {
   display: none; flex-direction: column;
   overflow: hidden; padding: 6px 0 8px;
 }
-#ext-panel.open { display: flex; }
+#ext-panel.open, #cookie-panel.open { display: flex; }
 .ext-panel-header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px 8px;
@@ -1646,3 +1646,12 @@ body.ui-hidden #content-area {
   padding: 8px 16px 2px;
   font-size: 11px; color: var(--muted); font-family: var(--font);
 }
+
+/* ======= Cookieパネル（v2.3.0） ======= */
+#cookie-panel { right: 8px; width: min(300px, calc(100vw - 16px)); }
+.ck-site { padding: 6px 16px 0; font-size: 14px; font-weight: 700; color: var(--text); font-family: var(--font); word-break: break-all; }
+.ck-count { padding: 0 16px 8px; font-size: 11px; color: var(--muted); font-family: var(--font); }
+.ck-seg { display: flex; gap: 4px; margin: 0 12px 6px; padding: 3px; background: var(--surface3); border-radius: 10px; }
+.ck-seg button { flex: 1; padding: 8px 4px; border: none; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; font-family: var(--font); cursor: pointer; }
+.ck-seg button.on { background: #1d9bf0; color: #fff; }
+.ck-note { padding: 0 16px 6px; font-size: 11px; color: var(--muted); font-family: var(--font); min-height: 14px; }

@@ -175,6 +175,28 @@
   <div class="ext-panel-note">今後のアップデートで拡張機能を追加予定</div>
 </div>
 
+<!-- Cookieパネル（サイト別に保存する/しないを選ぶ） -->
+<div id="cookie-panel">
+  <div class="ext-panel-header">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a4 4 0 0 0 5 5 4 4 0 0 0 4.8 4.8z"/><circle cx="8.5" cy="12" r="1"/><circle cx="12" cy="16" r="1"/><circle cx="14" cy="11" r="1"/></svg>
+    Cookie
+  </div>
+  <div class="mo-divider"></div>
+  <div class="ck-site" id="ck-site">（サイト未表示）</div>
+  <div class="ck-count" id="ck-count"></div>
+  <div class="ck-seg" id="ck-seg">
+    <button type="button" data-mode="save" onclick="setCookieModeForSite('save')">保存する</button>
+    <button type="button" data-mode="session" onclick="setCookieModeForSite('session')">保存しない</button>
+    <button type="button" data-mode="default" onclick="setCookieModeForSite(null)">既定に従う</button>
+  </div>
+  <div class="ck-note" id="ck-note"></div>
+  <button class="ext-row" onclick="deleteCookiesForSite()" title="このサイトのCookieを削除">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+    <span class="ext-row-name">このサイトのCookieを削除</span>
+  </button>
+  <div class="ext-panel-note">「保存しない」はブラウザを閉じると削除されます。既定の動作は設定ページで変更できます。</div>
+</div>
+
 <!-- その他メニュー -->
 <div id="more-options-panel">
   <div class="mo-quick-row">
@@ -235,6 +257,10 @@
     </div>
   </div>
   <div class="mo-divider"></div>
+  <button class="mo-item" data-panel-toggle="cookie" onclick="toggleCookiePanel();toggleMoreOptions()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a4 4 0 0 0 5 5 4 4 0 0 0 4.8 4.8z"/><circle cx="8.5" cy="12" r="1"/><circle cx="12" cy="16" r="1"/><circle cx="14" cy="11" r="1"/></svg>
+    Cookie（サイト別の保存設定）
+  </button>
   <button class="mo-item" onclick="toggleLogPanel();toggleMoreOptions()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
     ログを表示
@@ -389,6 +415,7 @@
 
 <!-- YouTube 動画再生のみ直接接続に対応 -->
 <script src="/worksheets/youtube-edu.js"></script>
+<script src="/worksheets/adblock-rules.js"></script>
 <script src="/worksheets/go.js"></script>
 </body>
 </html>

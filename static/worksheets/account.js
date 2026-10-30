@@ -10,6 +10,183 @@
 //  ゲスト時は localStorage にフォールバック。
 // =====================================================
 
+// =====================================================
+//  TC_COOKIES — プロキシCookieの保存ポリシー管理 (v2.3.0)
+//  UVのCookieはIndexedDB('__op'/'cookies')に保存される。
+//  ここでは「サイト別に保存する/しない」を選べるようにする。
+//   - 'save'    : 端末に残す（ログイン中はアカウントにも同期）
+//   - 'session' : ブラウザを閉じるまでだけ有効（次回起動時に削除・同期しない）
+// =====================================================
+const TC_COOKIES = (() => {
+  const POLICY_KEY = 'tc_cookie_policy';
+  const SESSION_FLAG = 'tc_ck_session';
+  const DB_NAME = '__op';
+
+  // 登録ドメイン(サイト単位)の簡易判定: example.co.jp / example.com
+  const SLD = new Set(['co', 'ne', 'or', 'ac', 'go', 'ed', 'gr', 'ad', 'com', 'org', 'net', 'gov', 'edu']);
+  function baseDomain(host) {
+    host = String(host || '').toLowerCase().replace(/^\./, '').replace(/:\d+$/, '');
+    if (!host || /^[\d.]+$/.test(host) || host.indexOf(':') >= 0) return host;
+    const p = host.split('.');
+    if (p.length <= 2) return host;
+    const tld = p[p.length - 1], sld = p[p.length - 2];
+    const n = (tld.length === 2 && SLD.has(sld)) ? 3 : 2;
+    return p.slice(-n).join('.');
+  }
+
+  // ---- ポリシー ----
+  function _normalize(p) {
+    const out = { default: 'save', sites: {} };
+    if (p && typeof p === 'object') {
+      if (p.default === 'session') out.default = 'session';
+      if (p.sites && typeof p.sites === 'object') {
+        for (const k of Object.keys(p.sites)) {
+          const v = p.sites[k];
+          if (v === 'save' || v === 'session') out.sites[baseDomain(k)] = v;
+        }
+      }
+    }
+    return out;
+  }
+  function getPolicy() {
+    try { return _normalize(JSON.parse(localStorage.getItem(POLICY_KEY) || 'null')); }
+    catch { return _normalize(null); }
+  }
+  function _store(p, sync) {
+    p = _normalize(p);
+    try { localStorage.setItem(POLICY_KEY, JSON.stringify(p)); } catch {}
+    if (sync && typeof window !== 'undefined' && window.TC_ACCOUNT && window.TC_ACCOUNT.saveCookiePolicy) {
+      try { window.TC_ACCOUNT.saveCookiePolicy(p); } catch {}
+    }
+    return p;
+  }
+  function setDefault(mode) {
+    const p = getPolicy(); p.default = mode === 'session' ? 'session' : 'save'; return _store(p, true);
+  }
+  // mode: 'save' | 'session' | null(既定に従う)
+  function setSitePolicy(host, mode) {
+    const p = getPolicy(); const b = baseDomain(host);
+    if (!b) return p;
+    if (mode === 'save' || mode === 'session') p.sites[b] = mode; else delete p.sites[b];
+    return _store(p, true);
+  }
+  function policyFor(host) {
+    const p = getPolicy(); const b = baseDomain(host);
+    return p.sites[b] || p.default;
+  }
+  function applyRemotePolicy(p) { if (p) _store(p, false); }
+  function shouldPersist(cookie) { return policyFor(cookie && cookie.domain) === 'save'; }
+
+  // ---- IndexedDB ----
+  function _open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = e => {
+        const store = e.target.result.createObjectStore('cookies', { keyPath: 'id' });
+        store.createIndex('path', 'path');
+      };
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function readAll() {
+    try {
+      const db = await _open();
+      return await new Promise((resolve, reject) => {
+        const req = db.transaction('cookies', 'readonly').objectStore('cookies').getAll();
+        req.onsuccess = () => { db.close(); resolve(req.result || []); };
+        req.onerror = () => { db.close(); reject(req.error); };
+      });
+    } catch { return []; }
+  }
+  function _toDate(v) {
+    if (v === undefined || v === null) return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    const d = new Date(v); return isNaN(d.getTime()) ? null : d;
+  }
+  function _expired(c, now) {
+    const set = _toDate(c.set);
+    if (set && c.maxAge && set.getTime() + c.maxAge * 1000 < now) return true;
+    const exp = _toDate(c.expires);
+    if (exp && exp.getTime() < now) return true;
+    return false;
+  }
+  // 結合(マージ)書き込み。既存を消さない。同じidは新しい方(set日時)を採用。
+  async function mergeIn(cookies) {
+    if (!cookies || !cookies.length) return 0;
+    const now = Date.now();
+    try {
+      const db = await _open();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('cookies', 'readwrite');
+        const store = tx.objectStore('cookies');
+        const getAll = store.getAll();
+        let n = 0;
+        getAll.onsuccess = () => {
+          const have = new Map((getAll.result || []).map(c => [c.id, c]));
+          for (const c of cookies) {
+            if (!c || !c.id || _expired(c, now)) continue;
+            const item = { ...c };
+            const set = _toDate(item.set), exp = _toDate(item.expires);
+            if (set) item.set = set; else delete item.set;
+            if (exp) item.expires = exp; else delete item.expires;
+            const cur = have.get(item.id);
+            const curSet = cur && _toDate(cur.set);
+            if (cur && curSet && set && curSet.getTime() >= set.getTime()) continue;
+            store.put(item); n++;
+          }
+        };
+        tx.oncomplete = () => { db.close(); resolve(n); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    } catch (e) { console.warn('[TC_COOKIES] mergeIn failed:', e); return 0; }
+  }
+  async function deleteWhere(pred) {
+    try {
+      const db = await _open();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('cookies', 'readwrite');
+        const store = tx.objectStore('cookies');
+        const getAll = store.getAll();
+        let n = 0;
+        getAll.onsuccess = () => {
+          for (const c of (getAll.result || [])) if (pred(c)) { store.delete(c.id); n++; }
+        };
+        tx.oncomplete = () => { db.close(); resolve(n); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    } catch { return 0; }
+  }
+  const deleteSite = (host) => { const b = baseDomain(host); return deleteWhere(c => baseDomain(c.domain) === b); };
+  const deleteAll = () => deleteWhere(() => true);
+
+  // 保存対象(ポリシー'save'・未期限切れ)のCookieだけを返す（アカウント同期用）
+  async function readPersistable() {
+    const now = Date.now();
+    return (await readAll()).filter(c => !_expired(c, now) && shouldPersist(c));
+  }
+  // サイト別の件数一覧
+  async function listSites() {
+    const map = new Map();
+    for (const c of await readAll()) {
+      const b = baseDomain(c.domain);
+      if (!b) continue;
+      map.set(b, (map.get(b) || 0) + 1);
+    }
+    return map;
+  }
+  // ブラウザを閉じた後の最初の起動時だけ、'session'サイトのCookieを消す
+  async function purgeSessionCookiesOnce() {
+    try { if (sessionStorage.getItem(SESSION_FLAG)) return 0; sessionStorage.setItem(SESSION_FLAG, '1'); } catch {}
+    return deleteWhere(c => !shouldPersist(c));
+  }
+
+  return { baseDomain, getPolicy, setDefault, setSitePolicy, policyFor, applyRemotePolicy,
+    shouldPersist, readAll, mergeIn, deleteSite, deleteAll, readPersistable, listSites,
+    purgeSessionCookiesOnce };
+})();
+window.TC_COOKIES = TC_COOKIES;
+
 const TC_ACCOUNT = (() => {
   // ---- 開発者アカウント（デベロッパータグを表示する専用ユーザー） ----
   const TC_DEV_USERS = ['sousou09'];
@@ -83,17 +260,28 @@ const TC_ACCOUNT = (() => {
   // 書き込み用内部ヘルパー（本人のファイルのみ。サーバーが認可）
   async function _writeDataImmediate(username, data) {
     let serverOk = false;
+    // 新旧判定用の更新時刻（サーバー版とIndexedDB版のどちらが新しいか比べる）
+    data.updatedAt = Date.now();
+    // 先に端末(IndexedDB)へ書く。ページ終了で通信が途切れても次回起動時にサーバーへ反映できる。
+    const idbPromise = _writeIDB(username, data);
     try {
+      const body = JSON.stringify(data);
+      // fetch の keepalive はボディ64KBまで。超えるとfetch自体が例外になり、
+      // 履歴が増えた途端にサーバー保存が一切行われなくなっていた(v2.3.0修正)。
       const res = await _fetch(_dataPath(username), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data, null, 2),
-        keepalive: true,
+        body,
+        keepalive: body.length < 60000,
       });
       if (res.ok) serverOk = true;
     } catch {}
+    await idbPromise;
+    return serverOk;
+  }
 
-    // IndexedDB へも常にバックアップ（オフライン対策）
+  // IndexedDB へのバックアップ書き込み（オフライン/通信断対策）
+  async function _writeIDB(username, data) {
     try {
       await new Promise((resolve, reject) => {
         const req = indexedDB.open('tc_userdata', 1);
@@ -110,7 +298,6 @@ const TC_ACCOUNT = (() => {
         req.onerror = () => reject(req.error);
       });
     } catch {}
-    return serverOk;
   }
 
   // デバウンス書き込み（500ms）
@@ -174,17 +361,39 @@ const TC_ACCOUNT = (() => {
 
   // サーバー（本人のみ許可）→ IndexedDB → 既定値 の順でドキュメントを取得（キャッシュ無視）
   async function _fetchDataFromSource(username) {
+    let server = null;
     try {
       const res = await _fetch(_dataPath(username), { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
-        if (json && json.username) return json;
+        if (json && json.username) server = json;
       }
     } catch {}
-    // フォールバック: IndexedDB
     const idb = await _readIDB(username);
-    if (idb) return idb;
+    // 端末側(IndexedDB)の方が新しい = サーバーへ書き損ねた変更が残っている
+    // （ページ終了時の通信断・サーバー再起動など）。新しい方を採用してサーバーへ再送する。
+    if (idb && idb.username === username && (!server || (idb.updatedAt || 0) > (server.updatedAt || 0))) {
+      if (server) {
+        // 他端末で増えた履歴などを失わないよう、配列は和集合でマージ
+        idb.history = _mergeHistory(idb.history, server.history);
+        idb.bookmarks = _mergeBy(idb.bookmarks, server.bookmarks, b => b.url);
+      }
+      _pendingResync = username;
+      return idb;
+    }
+    if (server) return server;
     return _defaultData(username);
+  }
+  let _pendingResync = null;
+  function _mergeBy(a, b, keyFn) {
+    const seen = new Set(), out = [];
+    for (const x of [...(a || []), ...(b || [])]) {
+      const k = keyFn(x); if (seen.has(k)) continue; seen.add(k); out.push(x);
+    }
+    return out;
+  }
+  function _mergeHistory(a, b) {
+    return _mergeBy(a, b, h => h.time + '|' + h.url).sort((x, y) => y.time - x.time).slice(0, 500);
   }
 
   // 単一インメモリキャッシュを介してドキュメントを返す。
@@ -200,6 +409,10 @@ const TC_ACCOUNT = (() => {
       // 取得の途中でユーザーが変わっていなければ採用
       if (_docCacheUser === username) _docCache = doc;
       _docLoadPromise = null;
+      if (_pendingResync === username) {
+        _pendingResync = null;
+        try { _writeData(username, doc); } catch {}
+      }
       return _docCache || doc;
     })();
     return _docLoadPromise;
@@ -225,87 +438,6 @@ const TC_ACCOUNT = (() => {
     return p;
   }
 
-  // ---- UV Cookie IndexedDB ヘルパー ----
-  function _openUVIDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open('__op', 1);
-      req.onupgradeneeded = e => {
-        const store = e.target.result.createObjectStore('cookies', { keyPath: 'id' });
-        store.createIndex('path', 'path');
-      };
-      req.onsuccess = e => resolve(e.target.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function _readUVCookiesFromIDB() {
-    try {
-      const db = await _openUVIDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction('cookies', 'readonly');
-        const req = tx.objectStore('cookies').getAll();
-        req.onsuccess = () => { db.close(); resolve(req.result || []); };
-        req.onerror = () => { db.close(); reject(req.error); };
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  async function _writeUVCookiesToIDB(cookies) {
-    if (!cookies || cookies.length === 0) return;
-    try {
-      const db = await _openUVIDB();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction('cookies', 'readwrite');
-        const store = tx.objectStore('cookies');
-        const clearReq = store.clear();
-        clearReq.onsuccess = () => {
-          const now = Date.now();
-          for (const cookie of cookies) {
-            try {
-              if (cookie.set !== undefined && cookie.set !== null) {
-                const rawSet = cookie.set;
-                const setTime = (typeof rawSet === 'number')
-                  ? rawSet
-                  : (rawSet instanceof Date ? rawSet.getTime() : new Date(rawSet).getTime());
-                if (!isNaN(setTime)) {
-                  if (cookie.maxAge && (setTime + cookie.maxAge * 1000) < now) continue;
-                }
-              }
-              if (cookie.expires) {
-                const exp = (cookie.expires instanceof Date)
-                  ? cookie.expires
-                  : new Date(cookie.expires);
-                if (!isNaN(exp.getTime()) && exp.getTime() < now) continue;
-              }
-            } catch { /* 解析失敗時はそのまま保存 */ }
-            const cookieToStore = { ...cookie };
-            if (cookieToStore.set !== undefined && cookieToStore.set !== null && !(cookieToStore.set instanceof Date)) {
-              try {
-                const d = new Date(cookieToStore.set);
-                if (!isNaN(d.getTime())) cookieToStore.set = d;
-                else delete cookieToStore.set;
-              } catch { delete cookieToStore.set; }
-            }
-            if (cookieToStore.expires !== undefined && cookieToStore.expires !== null && !(cookieToStore.expires instanceof Date)) {
-              try {
-                const d = new Date(cookieToStore.expires);
-                if (!isNaN(d.getTime())) cookieToStore.expires = d;
-                else delete cookieToStore.expires;
-              } catch { delete cookieToStore.expires; }
-            }
-            store.put(cookieToStore);
-          }
-        };
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-      });
-    } catch (e) {
-      console.warn('[TC_ACCOUNT] _writeUVCookiesToIDB failed:', e);
-    }
-  }
-
   // ---- ゲストストレージ（localStorage） ----
   const GUEST = {
     getHistory:    () => { try { return JSON.parse(localStorage.getItem('tc_history') || '[]'); } catch { return []; } },
@@ -315,6 +447,8 @@ const TC_ACCOUNT = (() => {
     getTabs:       () => { try { return JSON.parse(localStorage.getItem('tc_tabs') || '[]'); } catch { return []; } },
     saveTabs:      (v, ctr) => { localStorage.setItem('tc_tabs', JSON.stringify(v)); localStorage.setItem('tc_tabCounter', ctr); },
     getTabCounter: () => parseInt(localStorage.getItem('tc_tabCounter') || '0'),
+    getActiveTab:  () => { const v = localStorage.getItem('tc_activeTab'); return v == null ? null : parseInt(v); },
+    saveActiveTab: (v) => { if (v == null) localStorage.removeItem('tc_activeTab'); else localStorage.setItem('tc_activeTab', v); },
     getEngine:     () => localStorage.getItem('searchengine') || 'google',
     saveEngine:    (v) => localStorage.setItem('searchengine', v),
     getBg:         () => localStorage.getItem('tc_bg') || null,
@@ -456,13 +590,13 @@ const TC_ACCOUNT = (() => {
       await _mutate(_current.username, d => { d.bookmarks = v; });
     },
     async getTabs() {
-      if (!_current) return { tabs: GUEST.getTabs(), counter: GUEST.getTabCounter() };
+      if (!_current) return { tabs: GUEST.getTabs(), counter: GUEST.getTabCounter(), activeId: GUEST.getActiveTab() };
       const d = await _getData(_current.username);
-      return { tabs: d.tabs || [], counter: d.tabCounter || 0 };
+      return { tabs: d.tabs || [], counter: d.tabCounter || 0, activeId: d.activeTabId == null ? null : d.activeTabId };
     },
-    async saveTabs(tabs, counter) {
-      if (!_current) { GUEST.saveTabs(tabs, counter); return; }
-      await _mutate(_current.username, d => { d.tabs = tabs; d.tabCounter = counter; });
+    async saveTabs(tabs, counter, activeId) {
+      if (!_current) { GUEST.saveTabs(tabs, counter); GUEST.saveActiveTab(activeId); return; }
+      await _mutate(_current.username, d => { d.tabs = tabs; d.tabCounter = counter; d.activeTabId = activeId == null ? null : activeId; });
     },
     getEngine() {
       if (!_current) return GUEST.getEngine();
@@ -482,27 +616,36 @@ const TC_ACCOUNT = (() => {
       await API.updateAccount({ bg: v });
     },
 
-    // ---- UV Cookie 保存・復元（ログインユーザーのみ）----
+    // ---- UV Cookie 保存・復元（ログインユーザーのみ・サイト別ポリシー対応）----
+    // 'save' のサイトのCookieだけをアカウントへ保存する。'session' のサイトは同期しない。
     async saveCookies() {
       if (!_current) return;
       try {
-        const cookies = await _readUVCookiesFromIDB();
-        await _mutate(_current.username, d => { d.uvCookies = cookies; });
+        const cookies = await TC_COOKIES.readPersistable();
+        await _mutate(_current.username, d => { d.uvCookies = cookies; d.cookiePolicy = TC_COOKIES.getPolicy(); });
       } catch (e) {
         console.warn('[TC_ACCOUNT] saveCookies failed:', e);
       }
     },
 
+    // アカウントのCookieを端末へ「結合」する（端末にあるCookieは消さない）。
     async restoreCookies() {
       if (!_current) return;
       try {
         const d = await _getData(_current.username);
+        if (d.cookiePolicy) TC_COOKIES.applyRemotePolicy(d.cookiePolicy);
         if (d.uvCookies && d.uvCookies.length > 0) {
-          await _writeUVCookiesToIDB(d.uvCookies);
+          // 保存しない設定のサイトのCookieは復元しない
+          await TC_COOKIES.mergeIn(d.uvCookies.filter(c => TC_COOKIES.shouldPersist(c)));
         }
       } catch (e) {
         console.warn('[TC_ACCOUNT] restoreCookies failed:', e);
       }
+    },
+
+    async saveCookiePolicy(policy) {
+      if (!_current) return;
+      await _mutate(_current.username, d => { d.cookiePolicy = policy; });
     },
 
     // 他タブ/他端末の変更を取り込むため、サーバーから読み直す。
@@ -563,7 +706,7 @@ const TC_ACCOUNT = (() => {
       try {
         if (_current) {
           try {
-            const cookies = await _readUVCookiesFromIDB();
+            const cookies = await TC_COOKIES.readPersistable();
             const d = await _getData(_current.username);
             d.uvCookies = cookies;
             await _writeData(_current.username, d, { immediate: true });
@@ -590,7 +733,7 @@ const TC_ACCOUNT = (() => {
     setInterval(async () => {
       if (!_current) return;
       try {
-        const cookies = await _readUVCookiesFromIDB();
+        const cookies = await TC_COOKIES.readPersistable();
         if (!cookies || cookies.length === 0) return;
         await _mutate(_current.username, d => { d.uvCookies = cookies; });
       } catch {}
