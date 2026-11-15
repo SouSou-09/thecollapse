@@ -70,7 +70,9 @@ var DOMAINS = [
     'trafficstars.com', 'tsyndicate.com', 'juicyads.com', 'plugrush.com', 'clickadu.com',
     'propellerads.com', 'adsterra.com', 'hilltopads.net', 'adcash.com', 'ad-maven.com',
     'adf.ly', 'pubmatic.com', 'openx.net', 'rubiconproject.com', 'moatads.com',
-    'scorecardresearch.com', 'smartadserver.com', 'teads.tv', 'adskeeper.com', 'onclickads.net'
+    'scorecardresearch.com', 'smartadserver.com', 'teads.tv', 'adskeeper.com', 'onclickads.net',
+    // 国内SSP/DSP（momon-ga 等のバナー広告: tr.ssp / tr.dsp / img.dsp / js.dsp .bance.jp）
+    'bance.jp'
   ];
 
   function hostBlocked(host) {
