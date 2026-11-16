@@ -15,7 +15,7 @@
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v8 loaded'); }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v9 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
@@ -39,7 +39,7 @@ export default class BareTransport {
     delete outHeaders['content-encoding'];
     delete outHeaders['content-length'];
     delete outHeaders['transfer-encoding'];
-    outHeaders['x-uv3-transport'] = 'v8';
+    outHeaders['x-uv3-transport'] = 'v9';
     return {
       body: r.body,
       status,
@@ -47,7 +47,78 @@ export default class BareTransport {
       headers: outHeaders,
     };
   }
-  connect(_url, _protocols, _headers, _onopen, _onmessage, _onclose, _onerror) {
-    throw new Error('WebSocket over /service3/ is not supported yet');
+  // WebSocket(v9): bare v2 の手順で /bare/v2/ にトンネルする。
+  //   1) GET  /bare/v2/ws-new-meta  … 接続先(remote)とヘッダーを登録しIDを受け取る
+  //   2) WS   /bare/v2/             … Sec-WebSocket-Protocol にIDだけを入れて接続（サーバーが上流へ中継）
+  //   3) GET  /bare/v2/ws-meta      … 上流が選んだサブプロトコルを x-bare-headers から取得
+  // bare-mux は connect(url, protocols, headers, onopen, onmessage, onclose, onerror) を呼び、
+  // [send(data), close(code, reason)] を返すことを期待する。
+  // 注意: Origin など UV が渡すヘッダーは上流へそのまま送る（多くのゲームサーバーはOriginを検証する）。
+  connect(url, protocols, headers, onopen, onmessage, onclose, onerror) {
+    const u = new URL(String(url));
+    const h = {};
+    for (const [k, v] of Object.entries(headers || {})) h[String(k).toLowerCase()] = v;
+    h['host'] = u.host;
+    // bare v2 は上流へのアップグレード要求ヘッダーをクライアント側で指定する必要がある
+    h['connection'] = 'Upgrade';
+    h['upgrade'] = 'websocket';
+    if (protocols && protocols.length) h['sec-websocket-protocol'] = protocols.join(', ');
+    let ws = null, wantClose = null, done = false, opened = false;
+    const queue = [], inbox = [];
+    const fail = (e) => { if (!done) { done = true; try { onerror(e); } catch (_) {} } };
+    (async () => {
+      const m = await fetch(this.base + 'v2/ws-new-meta', {
+        headers: {
+          'x-bare-protocol': u.protocol,
+          'x-bare-host': u.hostname,
+          'x-bare-port': String(u.port || (u.protocol === 'wss:' ? 443 : 80)),
+          'x-bare-path': u.pathname + u.search,
+          'x-bare-headers': JSON.stringify(h),
+        },
+      });
+      if (!m.ok) throw new Error('ws-new-meta failed: ' + m.status);
+      const id = await m.text();
+      const base = (self.location.protocol === 'https:' ? 'wss://' : 'ws://') + self.location.host + this.base + 'v2/';
+      ws = new WebSocket(base, [id]);
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = async () => {
+        let proto = '';
+        try {
+          const r = await fetch(this.base + 'v2/ws-meta', { headers: { 'x-bare-id': id } });
+          let xh = r.headers.get('x-bare-headers');
+          if (xh == null) { // 3072文字超は x-bare-headers-N に分割される
+            const parts = [];
+            r.headers.forEach((v, k) => { const mm = /^x-bare-headers-(\d+)$/.exec(k); if (mm) parts[+mm[1]] = v.slice(1); });
+            xh = parts.join('') || '{}';
+          }
+          const hd = JSON.parse(xh);
+          // 上流のヘッダー名は大文字小文字が混在する（Sec-WebSocket-Protocol）ため小文字化して引く
+          let sp;
+          for (const k of Object.keys(hd)) if (k.toLowerCase() === 'sec-websocket-protocol') sp = hd[k];
+          proto = Array.isArray(sp) ? sp[0] : (sp || '');
+        } catch (_) {}
+        if (wantClose) { try { ws.close(wantClose[0], wantClose[1]); } catch (_) {} return; }
+        opened = true;
+        onopen(proto);
+        // open より前に届いたメッセージ（接続直後にサーバーが送る初期データ）を順序どおり渡す
+        while (inbox.length) onmessage(inbox.shift());
+        while (queue.length) ws.send(queue.shift());
+      };
+      ws.onmessage = (e) => { if (opened) onmessage(e.data); else inbox.push(e.data); };
+      ws.onclose = (e) => {
+        done = true;
+        // open前に閉じられた場合も、受信済みデータを先に渡してから閉じる
+        if (!opened) { opened = true; try { onopen(''); } catch (_) {} while (inbox.length) onmessage(inbox.shift()); }
+        onclose(e.code, e.reason);
+      };
+      ws.onerror = () => fail('WebSocket error');
+    })().catch(fail);
+    const send = (data) => {
+      if (ws && ws.readyState === 1) ws.send(data); else queue.push(data);
+    };
+    const close = (code, reason) => {
+      if (ws && ws.readyState <= 1) { try { ws.close(code, reason); } catch (_) {} } else wantClose = [code, reason];
+    };
+    return [send, close];
   }
 }
