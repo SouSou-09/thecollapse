@@ -1,7 +1,8 @@
 import { createBareServer } from "@nebula-services/bare-server-node";
 import wisp from "wisp-server-node";
 import express from "express";
-import { createServer } from "node:http";
+import { createServer, Agent as HttpAgent } from "node:http";
+import { Agent as HttpsAgent } from "node:https";
 import { uvPath } from "@titaniumnetwork-dev/ultraviolet";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
@@ -19,7 +20,27 @@ const uv3CustomPath = fileURLToPath(new URL("./static/uv3/", import.meta.url));
 const baremuxPath = fileURLToPath(new URL("./node_modules/@mercuryworkshop/bare-mux/dist/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
 const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
-const bare = createBareServer("/bare/", {});
+// bare v2 は上流へ送るヘッダーから `connection` を除外する（forbiddenSendHeaders）ため、
+// WebSocket のアップグレード要求が Node 既定の `Connection: keep-alive` で送られ、
+// 上流が101を返さず「Remote did not upgrade the WebSocket」になる。
+// → `Upgrade` ヘッダー付きの要求だけ `Connection: Upgrade` を付与するエージェントを使う。
+// （UV v3 経由で Call of War 等のWebSocketゲームを動かすために必要）
+class UpgradeHttpAgent extends HttpAgent {
+  addRequest(req, opts) {
+    try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
+    return super.addRequest(req, opts);
+  }
+}
+class UpgradeHttpsAgent extends HttpsAgent {
+  addRequest(req, opts) {
+    try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
+    return super.addRequest(req, opts);
+  }
+}
+const bare = createBareServer("/bare/", {
+  httpAgent: new UpgradeHttpAgent({ keepAlive: true }),
+  httpsAgent: new UpgradeHttpsAgent({ keepAlive: true }),
+});
 const app = express();
 dotenv.config();
 
@@ -164,18 +185,20 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
-app.use(express.static(publicPath));
-app.use("/worksheets/uv/", express.static(uv1Path));
-app.use("/uv/", express.static(uv1Path));
-
-// TheCollapse V3（開発用・未リリース）: Ultraviolet v3 を /service3/ に並行導入。
-// 既存の /service/（v1.0.11・static/uv1 に退避済み）は一切変更しない。
+// ⚠ express.static より前に置くこと。後ろだと static が先に /uv3/sw.js を返し、
+// Service-Worker-Allowed が付かず /service3/ スコープで登録できない。
 app.get("/uv3/sw.js", (req, res) => {
   res.setHeader("Service-Worker-Allowed", "/service3/");
   res.setHeader("Cache-Control", "no-cache");
   // 広告ブロック対応のカスタムSW（標準の dist/sw.js に広告ブロックを追加したもの）
   res.sendFile(uv3CustomPath + "sw.js");
 });
+app.use(express.static(publicPath));
+app.use("/worksheets/uv/", express.static(uv1Path));
+app.use("/uv/", express.static(uv1Path));
+
+// TheCollapse V3（開発用・未リリース）: Ultraviolet v3 を /service3/ に並行導入。
+// 既存の /service/（v1.0.11・static/uv1 に退避済み）は一切変更しない。
 app.use("/uv3/", express.static(uv3CustomPath));
 app.use("/uv3/", express.static(uvPath));
 app.use("/baremux/", express.static(baremuxPath));
