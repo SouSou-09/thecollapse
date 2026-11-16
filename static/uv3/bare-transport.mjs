@@ -13,9 +13,34 @@
 // v1のBareClientは自前でhostを付けていたが、v3(UV SW)は付けない → ここで必ず付与する。
 // request()はpostMessageで複製可能なプレーンオブジェクト
 // {body, status, statusText, headers} を返すこと（ResponseはDataCloneErrorになる）。
+// bare は x-bare-headers が長い（約3000文字超）と x-bare-headers-0, -1 … に分割して送受信する（各値は先頭に ';'）。
+// Cookie が多いサイトや長いヘッダーを返すサイトで、結合しないと全ヘッダーが失われページが壊れる。
+const BARE_MAX = 3072;
+function joinBareHeaders(res) {
+  const direct = res.headers.get('x-bare-headers');
+  if (direct != null) return direct;
+  const parts = [];
+  res.headers.forEach((v, k) => {
+    const m = /^x-bare-headers-(\d+)$/.exec(k);
+    if (m) parts[+m[1]] = v.startsWith(';') ? v.slice(1) : v;
+  });
+  return parts.length ? parts.join('') : '{}';
+}
+function splitBareHeaders(obj, json) {
+  if (json.length <= BARE_MAX) { obj['x-bare-headers'] = json; return obj; }
+  for (let i = 0, n = 0; i < json.length; i += BARE_MAX) obj['x-bare-headers-' + (n++)] = ';' + json.slice(i, i + BARE_MAX);
+  return obj;
+}
+// bare 自体のエラー（x-bare-status が無い応答）は原因が分かるよう例外にする（UVのエラーページに表示される）
+async function bareError(r) {
+  let detail = '';
+  try { const j = JSON.parse(await r.text()); detail = [j.code, j.id, j.message].filter(Boolean).join(' / '); } catch (_) {}
+  return new Error('bare server error ' + r.status + (detail ? ': ' + detail : ''));
+}
+
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v9 loaded'); }
+  async init() { this.ready = true; console.log('[uv3] bare-transport v10 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
@@ -24,22 +49,22 @@ export default class BareTransport {
     h['host'] = u.host; // 非デフォルトポートも含む(例 example.com:8080)
     const r = await fetch(this.base + 'v2/', {
       method: m,
-      headers: {
+      headers: splitBareHeaders({
         'x-bare-protocol': u.protocol,
         'x-bare-host': u.hostname,
         'x-bare-port': String(u.port || (u.protocol === 'https:' ? 443 : 80)),
         'x-bare-path': u.pathname + u.search,
-        'x-bare-headers': JSON.stringify(h),
-      },
+      }, JSON.stringify(h)),
       body: ['GET', 'HEAD'].includes(m) ? undefined : (body ?? undefined),
     });
+    if (!r.headers.has('x-bare-status') && !r.ok) throw await bareError(r);
     let outHeaders = {};
-    try { outHeaders = JSON.parse(r.headers.get('x-bare-headers') || '{}'); } catch (e) {}
+    try { outHeaders = JSON.parse(joinBareHeaders(r)); } catch (e) {}
     const status = Number(r.headers.get('x-bare-status')) || r.status;
     delete outHeaders['content-encoding'];
     delete outHeaders['content-length'];
     delete outHeaders['transfer-encoding'];
-    outHeaders['x-uv3-transport'] = 'v9';
+    outHeaders['x-uv3-transport'] = 'v10';
     return {
       body: r.body,
       status,
@@ -68,13 +93,12 @@ export default class BareTransport {
     const fail = (e) => { if (!done) { done = true; try { onerror(e); } catch (_) {} } };
     (async () => {
       const m = await fetch(this.base + 'v2/ws-new-meta', {
-        headers: {
+        headers: splitBareHeaders({
           'x-bare-protocol': u.protocol,
           'x-bare-host': u.hostname,
           'x-bare-port': String(u.port || (u.protocol === 'wss:' ? 443 : 80)),
           'x-bare-path': u.pathname + u.search,
-          'x-bare-headers': JSON.stringify(h),
-        },
+        }, JSON.stringify(h)),
       });
       if (!m.ok) throw new Error('ws-new-meta failed: ' + m.status);
       const id = await m.text();
@@ -85,12 +109,7 @@ export default class BareTransport {
         let proto = '';
         try {
           const r = await fetch(this.base + 'v2/ws-meta', { headers: { 'x-bare-id': id } });
-          let xh = r.headers.get('x-bare-headers');
-          if (xh == null) { // 3072文字超は x-bare-headers-N に分割される
-            const parts = [];
-            r.headers.forEach((v, k) => { const mm = /^x-bare-headers-(\d+)$/.exec(k); if (mm) parts[+mm[1]] = v.slice(1); });
-            xh = parts.join('') || '{}';
-          }
+          const xh = joinBareHeaders(r);
           const hd = JSON.parse(xh);
           // 上流のヘッダー名は大文字小文字が混在する（Sec-WebSocket-Protocol）ため小文字化して引く
           let sp;
