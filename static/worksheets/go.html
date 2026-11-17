@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>TheCollapse</title>
 <link rel="stylesheet" href="/worksheets/go.css">
+<link rel="stylesheet" href="/worksheets/devtools.css">
 <!-- deferでスクリプトの同期ブロックを防ぐ（uv.bundle.jsは1.6MBあるため必須） -->
 <script src="/worksheets/uv/uv.bundle.js" defer></script>
 <script src="/worksheets/uv/uv.config.js" defer></script>
@@ -263,11 +264,11 @@
   </button>
   <button class="mo-item" onclick="toggleLogPanel();toggleMoreOptions()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    ログを表示
+    開発者ツール: Console
   </button>
   <button class="mo-item" onclick="toggleElementsPanel();toggleMoreOptions()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-    Elements
+    開発者ツール: Elements
   </button>
   <div class="mo-divider"></div>
   <button class="mo-item" onclick="toggleGoAccountMenu()">
@@ -308,114 +309,16 @@
   </div>
 </div>
 
-<!-- ログパネル -->
-<div id="log-panel">
-  <div id="log-resize-handle"></div>
-  <div class="log-head">
-    <div class="log-head-top">
-      <div class="log-head-title">
-        ログ
-        <span class="log-count-badge" id="logCountBadge">0</span>
-        <div class="log-search-wrap">
-          <svg class="log-search-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input class="log-search" id="logSearch" type="text" placeholder="フィルター…" autocomplete="off" spellcheck="false">
-        </div>
-      </div>
-      <div class="log-head-controls">
-        <button class="log-tool-btn" id="copyLogs" title="ログをコピー">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button class="log-tool-btn" id="clearLogs" title="ログをクリア">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        </button>
-        <button class="log-tool-btn" onclick="toggleLogPanel()" title="閉じる">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="log-filter-bar" id="logFilterBar">
-      <button class="log-filter-btn f-all active" data-filter="all">All</button>
-      <button class="log-filter-btn f-info" data-filter="info">Info</button>
-      <button class="log-filter-btn f-ok" data-filter="ok">OK</button>
-      <button class="log-filter-btn f-warn" data-filter="warn">Warn</button>
-      <button class="log-filter-btn f-err" data-filter="err">Err</button>
-    </div>
-  </div>
-  <div class="log-body" id="logbox">
-    <div class="log-no-results" id="logNoResults">一致するエントリがありません</div>
-  </div>
-  <div class="log-footer">
-    <div class="log-status">
-      <span class="log-dot idle" id="logStatusDot"></span>
-      <span id="logStatusText">Ready</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span id="logStats" style="font-family:monospace;">0 件</span>
-      <button class="log-autoscroll-btn pinned" id="logAutoScrollBtn" title="自動スクロール">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
-        自動
-      </button>
-    </div>
-  </div>
-</div>
+<!-- DevTools（Console + Elements 統合パネル。DOM は devtools.js が構築する） -->
+<div id="dt-panel"></div>
 
 <!-- ズームポップアップ -->
 <div id="zoom-popup"></div>
 
-<!-- Elements Inspector パネル -->
-<div id="elements-panel">
-  <div id="elem-resize-handle"></div>
-  <div class="elem-head">
-    <div class="elem-head-top">
-      <span class="elem-head-label">Elements</span>
-      <div class="elem-search-wrap">
-        <svg class="elem-search-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input class="elem-search" id="elemSearch" type="text" placeholder="タグ・属性をフィルター…" autocomplete="off" spellcheck="false">
-      </div>
-      <button class="elem-tool-btn" id="elemRefreshBtn" title="リフレッシュ">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-      </button>
-      <button class="elem-tool-btn active" id="elemDetailToggleBtn" title="詳細パネル切替">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      </button>
-      <button class="elem-tool-btn" onclick="toggleElementsPanel()" title="閉じる">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="elem-breadcrumb" id="elemBreadcrumb"></div>
-  </div>
-  <div class="elem-body" id="elemBody">
-    <ul class="elements-tree" id="elemTree"></ul>
-  </div>
-  <div id="elem-detail">
-    <div class="elem-tab-bar">
-      <button class="elem-tab active" data-tab="styles">Styles</button>
-      <button class="elem-tab" data-tab="box">Box</button>
-      <button class="elem-tab" data-tab="attrs">Attrs</button>
-    </div>
-    <div id="elem-detail-content"></div>
-  </div>
-</div>
-
-<!-- Elements コンテキストメニュー -->
-<div id="elem-ctx-menu">
-  <button class="elem-ctx-item" id="elemCtxSelector">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-    セレクタをコピー
-  </button>
-  <button class="elem-ctx-item" id="elemCtxHtml">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-    HTMLをコピー
-  </button>
-  <button class="elem-ctx-item" id="elemCtxText">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-    テキストをコピー
-  </button>
-</div>
-
 <!-- YouTube 動画再生のみ直接接続に対応 -->
 <script src="/worksheets/youtube-edu.js"></script>
 <script src="/worksheets/adblock-rules.js"></script>
+<script src="/worksheets/devtools.js"></script>
 <script src="/worksheets/go.js"></script>
 </body>
 </html>
