@@ -364,7 +364,7 @@ nav {
     </div>
     <div class="nav-item" onclick="showSection('uv', this)" id="nav-uv">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      Ultraviolet
+      プロキシエンジン
     </div>
     <div class="nav-item" onclick="showSection('cookie', this)" id="nav-cookie">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a4 4 0 0 0 5 5 4 4 0 0 0 4.8 4.8z"/><circle cx="8.5" cy="12" r="1"/><circle cx="12" cy="16" r="1"/><circle cx="14" cy="11" r="1"/></svg>
@@ -411,16 +411,16 @@ nav {
       </div>
     </div>
 <div id="section-uv" class="section" style="display:none;">
-  <div class="section-title">Ultraviolet</div>
+  <div class="section-title">プロキシエンジン</div>
   <div class="setting-card">
     <div class="setting-info">
       <div class="setting-label">プロキシエンジン</div>
-      <div class="setting-desc">サイトが読み込めない・表示されない場合に、プロキシの互換エンジンを切り替えます（試験運用）。変更は再読み込み後に反映されます。表示できなくなった場合は「従来」に戻してください。</div>
+      <div class="setting-desc">使用するプロキシエンジンを切り替えます。変更は再読み込み後に反映されます。サイトが表示できなくなった場合は「従来（Ultraviolet 1.0）」に戻してください。</div>
     </div>
     <div class="setting-control">
       <select class="styled-select" id="uv-engine-select">
         <option value="v1">従来（Ultraviolet 1.0）</option>
-        <option value="v3">新式（Ultraviolet 3.2・試験中）</option>
+        <option value="ir1">IR V1</option>
       </select>
     </div>
   </div>
@@ -937,7 +937,11 @@ async function saveNPrefs() {
 (function(){
   var sel = document.getElementById('uv-engine-select');
   if (!sel) return;
-  try { sel.value = localStorage.getItem('dev_engine') === 'v3' ? 'v3' : 'v1'; } catch (e) { sel.value = 'v1'; }
+  try {
+    var cur = localStorage.getItem('dev_engine');
+    sel.value = (cur === 'ir1' || cur === 'v3') ? 'ir1' : 'v1';
+    if (cur === 'v3') localStorage.setItem('dev_engine', 'ir1');
+  } catch (e) { sel.value = 'v1'; }
   sel.addEventListener('change', function(){
     try { localStorage.setItem('dev_engine', sel.value); } catch (e) {}
     if (typeof showToast === 'function') showToast('保存しました（再読み込みで反映されます）');

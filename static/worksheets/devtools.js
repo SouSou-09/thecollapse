@@ -33,7 +33,7 @@
   function safe(fn, fb) { try { return fn(); } catch (e) { return fb; } }
   function decodeUrl(u) {
     try {
-      if (typeof u === 'string' && /\/service3?\//.test(u) && typeof decodeProxyUrl === 'function') {
+      if (typeof u === 'string' && /\/(ir1-service|service3?)\//.test(u) && typeof decodeProxyUrl === 'function') {
         const d = decodeProxyUrl(u);
         if (d) return d;
       }
@@ -293,6 +293,15 @@
   const NET_PENDING = new Map();
   function hookWindow(win, f) {
     if (!win || win.__tcDt) return false;
+    // about:blank やプロキシ(UV/IR V1)のハンドラ初期化前に fetch / XHR をラップすると、
+    // 後から走る __uvHook がすでにラップ済みの fetch をさらに上書きする順序ズレや、
+    // 遷移直前の初期 about:blank にフックが干渉する問題が起きる。
+    // プロキシURL配下のフレームでは __uv の初期化完了を待ってからフックする。
+    try {
+      const href = String(win.location && win.location.href || '');
+      if (!href || href === 'about:blank') return false;
+      if (/\/(ir1-service|service3?)\//.test(href) && !win.__uv) return false;
+    } catch (e) { return false; }
     try { Object.defineProperty(win, '__tcDt', { value: true, configurable: true }); } catch (e) { return false; }
     const tabId = f.tabId;
 
@@ -380,8 +389,8 @@
       }
     } catch (e) {}
 
-    // ショートカットを iframe 内でも有効に
-    try { win.addEventListener('keydown', onKey, true); } catch (e) {}
+    // ショートカットを iframe 内でも有効に（キャプチャ段階だとサイトのフォーム送信・Enter処理より先に介入するためバブル段階で登録）
+    try { win.addEventListener('keydown', onKey, false); } catch (e) {}
     return true;
   }
   function netBegin(tabId, method, url, kind) {
