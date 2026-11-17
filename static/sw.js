@@ -23,9 +23,30 @@ self.addEventListener('activate', event => {
     );
 });
 
+function sanitizeNavResponse(res, dest) {
+    if (!res) return res;
+    const isDoc = dest === 'document' || dest === 'iframe' || dest === 'frame';
+    const hasBadEnc = res.headers && (res.headers.has('content-encoding') || res.headers.has('transfer-encoding'));
+    const cd = (isDoc && res.headers && res.headers.get('content-disposition')) || '';
+    const hasInlineCd = isDoc && /^\s*inline\b/i.test(cd);
+    if (!hasBadEnc && !hasInlineCd) return res;
+    const headers = new Headers(res.headers);
+    headers.delete('content-encoding');
+    headers.delete('content-length');
+    headers.delete('transfer-encoding');
+    if (hasInlineCd) headers.delete('content-disposition');
+    return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers,
+    });
+}
+
 // 広告ブロック(v2.3.0): 広告URLの通信遮断とHTMLへの早期CSS注入をSW内で行う
-self.addEventListener('fetch', event =>
+self.addEventListener('fetch', event => {
+    const dest = event.request.destination;
     event.respondWith(
         self.TCAdblock.wrap(event, () => sw.fetch(event), { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl })
-    )
-);
+            .then(res => sanitizeNavResponse(res, dest))
+    );
+});

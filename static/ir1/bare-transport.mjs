@@ -38,9 +38,15 @@ async function bareError(r) {
   return new Error('bare server error ' + r.status + (detail ? ': ' + detail : ''));
 }
 
+const STRIP_RESPONSE_HEADERS = new Set([
+  'content-encoding',
+  'content-length',
+  'transfer-encoding',
+]);
+
 export default class BareTransport {
   constructor(_args) { this.base = '/bare/'; this.ready = false; }
-  async init() { this.ready = true; console.log('[uv3] bare-transport v10 loaded'); }
+  async init() { this.ready = true; console.log('[ir1] bare-transport v11 loaded'); }
   async request(remote, method, body, headers, _signal) {
     const u = new URL(String(remote));
     const m = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method) ? method : 'GET';
@@ -58,13 +64,16 @@ export default class BareTransport {
       body: ['GET', 'HEAD'].includes(m) ? undefined : (body ?? undefined),
     });
     if (!r.headers.has('x-bare-status') && !r.ok) throw await bareError(r);
-    let outHeaders = {};
-    try { outHeaders = JSON.parse(joinBareHeaders(r)); } catch (e) {}
+    let rawHeaders = {};
+    try { rawHeaders = JSON.parse(joinBareHeaders(r)); } catch (e) {}
+    const outHeaders = {};
+    for (const [k, v] of Object.entries(rawHeaders || {})) {
+      const lk = String(k).toLowerCase();
+      if (STRIP_RESPONSE_HEADERS.has(lk)) continue;
+      outHeaders[lk] = v;
+    }
     const status = Number(r.headers.get('x-bare-status')) || r.status;
-    delete outHeaders['content-encoding'];
-    delete outHeaders['content-length'];
-    delete outHeaders['transfer-encoding'];
-    outHeaders['x-uv3-transport'] = 'v10';
+    outHeaders['x-ir1-transport'] = 'v11';
     return {
       body: r.body,
       status,

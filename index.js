@@ -14,9 +14,9 @@ import { attachAuthRoutes, getSessionUser } from "./auth.js";
 import { attachSnsRoutes } from "./sns.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
-// v1（現行エンジン）のdist退避先と、v3用カスタムconfigの場所
+// v1（現行エンジン）のdist退避先と、IR V1用カスタムconfigの場所
 const uv1Path = fileURLToPath(new URL("./static/uv1/", import.meta.url));
-const uv3CustomPath = fileURLToPath(new URL("./static/uv3/", import.meta.url));
+const ir1CustomPath = fileURLToPath(new URL("./static/ir1/", import.meta.url));
 const baremuxPath = fileURLToPath(new URL("./node_modules/@mercuryworkshop/bare-mux/dist/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
 const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
@@ -24,7 +24,7 @@ const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
 // WebSocket のアップグレード要求が Node 既定の `Connection: keep-alive` で送られ、
 // 上流が101を返さず「Remote did not upgrade the WebSocket」になる。
 // → `Upgrade` ヘッダー付きの要求だけ `Connection: Upgrade` を付与するエージェントを使う。
-// （UV v3 経由で Call of War 等のWebSocketゲームを動かすために必要）
+// （IR V1 経由で Call of War 等のWebSocketゲームを動かすために必要）
 class UpgradeHttpAgent extends HttpAgent {
   addRequest(req, opts) {
     try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
@@ -185,46 +185,57 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
-// ⚠ express.static より前に置くこと。後ろだと static が先に /uv3/sw.js を返し、
-// Service-Worker-Allowed が付かず /service3/ スコープで登録できない。
-app.get("/uv3/sw.js", (req, res) => {
-  res.setHeader("Service-Worker-Allowed", "/service3/");
+// ⚠ express.static より前に置くこと。後ろだと static が先に /ir1/sw.js を返し、
+// Service-Worker-Allowed が付かず /ir1-service/ スコープで登録できない。
+app.get("/ir1/sw.js", (req, res) => {
+  res.setHeader("Service-Worker-Allowed", "/ir1-service/");
   res.setHeader("Cache-Control", "no-cache");
   // 広告ブロック対応のカスタムSW（標準の dist/sw.js に広告ブロックを追加したもの）
-  res.sendFile(uv3CustomPath + "sw.js");
+  res.sendFile(ir1CustomPath + "sw.js");
 });
 app.use(express.static(publicPath));
 app.use("/worksheets/uv/", express.static(uv1Path));
 app.use("/uv/", express.static(uv1Path));
 
-// TheCollapse V3（開発用・未リリース）: Ultraviolet v3 を /service3/ に並行導入。
-// 既存の /service/（v1.0.11・static/uv1 に退避済み）は一切変更しない。
-app.use("/uv3/", express.static(uv3CustomPath));
-app.use("/uv3/", express.static(uvPath));
+// IR V1（UV V3ベースエンジン）を /ir1-service/ で配信。
+// 既存の /service/（v1.0.11・static/uv1 に退避済み）はそのまま維持。
+for (const kind of ["bundle", "client", "handler", "sw"]) {
+  app.get(`/ir1/ir.${kind}.js`, (req, res) => {
+    res.sendFile(join(uvPath, `uv.${kind}.js`));
+  });
+  app.get(`/ir1/uv.${kind}.js.map`, (req, res) => {
+    res.sendFile(join(uvPath, `uv.${kind}.js.map`));
+  });
+}
+app.use("/ir1/", express.static(ir1CustomPath));
+app.use("/ir1/", express.static(uvPath));
 app.use("/baremux/", express.static(baremuxPath));
 
-// bare経由の上流リクエストは常時identity(無圧縮)で取得する。
-// ブラウザは/bare/へのfetchにaccept-encoding: br/gzipを自動付与し(禁止ヘッダーで削除不可)、
-// bareサーバーがそれを上流に転送すると圧縮レスポンスが素通しし、
-// ページ側で文字化け・読み込み停止になるためここで上書きする。
-app.use("/bare/", (req, res, next) => { req.headers["accept-encoding"] = "gzip"; next(); });
-
-// bare v2 のHTTPリクエストで x-bare-headers に host が無い場合はサーバー側で補完する。
+// bare v2 のHTTPリクエストで x-bare-headers に host が無い場合はサーバー側で補完し、
+// また accept-encoding を gzip に固定する（express の app.use("/bare/", ...) は
+// server.on("request") で bare.shouldRoute(req) が先に分岐するため通らないことに注意）。
 // bare-serverは上流へ setHost:false で送信するため、hostが無いとHostヘッダー無しの
-// リクエストになり、Cloudflare配下のサイトが 400 Bad Request を返す（UV v3で常に失敗していた原因）。
-// 古いトランスポートがキャッシュに残っていても動くよう、ここで防御的に付与する。
-function ensureBareHost(req) {
+// リクエストになり、Cloudflare配下のサイトが 400 Bad Request を返す。
+// またブラウザが br / zstd を要求すると DuckDuckGo 等で不正な圧縮応答や 202 空応答に
+// なることがあるため、gzip に統一してブラウザ側 fetch で確実に自動解凍させる。
+function prepareBareRequest(req) {
+  req.headers["accept-encoding"] = "gzip";
   try {
     const xh = req.headers["x-bare-headers"];
     const host = req.headers["x-bare-host"];
     if (typeof xh !== "string" || typeof host !== "string" || !host) return;
     const json = JSON.parse(xh);
     if (!json || typeof json !== "object" || Array.isArray(json)) return;
-    if (Object.keys(json).some((k) => k.toLowerCase() === "host")) return;
-    const proto = String(req.headers["x-bare-protocol"] || "");
-    const port = String(req.headers["x-bare-port"] || "");
-    const def = (proto === "https:" || proto === "wss:") ? "443" : "80";
-    json.host = port && port !== def ? `${host}:${port}` : host;
+    for (const k of Object.keys(json)) {
+      if (k.toLowerCase() === "accept-encoding") delete json[k];
+    }
+    json["accept-encoding"] = "gzip";
+    if (!Object.keys(json).some((k) => k.toLowerCase() === "host")) {
+      const proto = String(req.headers["x-bare-protocol"] || "");
+      const port = String(req.headers["x-bare-port"] || "");
+      const def = (proto === "https:" || proto === "wss:") ? "443" : "80";
+      json.host = port && port !== def ? `${host}:${port}` : host;
+    }
     req.headers["x-bare-headers"] = JSON.stringify(json);
   } catch {
     // 不正なJSONは bare-server 側のバリデーションに任せる
@@ -346,7 +357,7 @@ const server = createServer();
 
 server.on("request", (req, res) => {
   if (bare.shouldRoute(req)) {
-    ensureBareHost(req);
+    prepareBareRequest(req);
     bare.routeRequest(req, res);
   } else {
     app(req, res);

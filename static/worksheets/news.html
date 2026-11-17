@@ -234,10 +234,11 @@ function parseChangelog(md) {
   }
   if (start === -1) return [];
 
-  // 次の同レベル以上の見出し（更新履歴の終わり）まで
+  // 次の大見出し（# ...）またはバージョン以外の ## 見出し（## ライセンス 等）までを更新履歴とする
   let end = lines.length;
   for (let i = start; i < lines.length; i++) {
     if (/^#\s+/.test(lines[i])) { end = i; break; }
+    if (/^##\s+(?!v[0-9])/i.test(lines[i])) { end = i; break; }
   }
 
   const section = lines.slice(start, end);
