@@ -40,6 +40,17 @@ node index.js
 
 ---
 
+## v3.0.1
+
+### 修正点
+
+- G123 のプラットフォームが読み込み時に JS エラー（Proxy の ownKeys 重複による TypeError、`Illegal invocation`）で止まる問題を修正
+- IR V1 の偽 `navigator.serviceWorker` を実際の EventTarget にして G123 の Workbox 登録エラーを解消
+- 診断用ページ `/__diag/` を Service Worker のプロキシ対象から除外
+- Call of War でログイン後に画面が真っ白になる問題を修正（UV の書き換え処理がクラスフィールド名 `location` 等を壊して構文エラーになっていたため、配信時にパッチ）
+
+---
+
 ## v3.0.0
 
 ### 新機能

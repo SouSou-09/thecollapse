@@ -362,10 +362,97 @@
 
         const isWindow = typeof globalScope.window !== 'undefined' && !!globalScope.document;
 
+        // 0) Proxy の ownKeys トラップが返すキー配列の重複を除去する。
+        //    G123 の qiankun サンドボックスは `Es(keys)` で `this[k] = true` を使って重複排除するが、
+        //    UV が動的プロパティアクセスを `this[__uv.$wrap(k)]` に書き換える際 'location' が
+        //    '__uv$location' に化けて重複排除が効かず、'ownKeys' on proxy: trap returned duplicate entries
+        //    (TypeError) でゲームのロードが止まる。→ ownKeys の結果を必ず一意にして返す。
+        //    ※ __uv の準備を待たず、ゲームのスクリプトが走る前に即時適用する。
+        try {
+            const NativeProxy = globalScope.Proxy;
+            if (typeof NativeProxy === 'function' && !NativeProxy.__ir1ProxyWrapped) {
+                const dedupeKeys = (keys) => {
+                    if (!keys || typeof keys.length !== 'number') return keys;
+                    const seen = new Set();
+                    const out = [];
+                    for (let i = 0; i < keys.length; i++) {
+                        const k = keys[i];
+                        if (seen.has(k)) continue;
+                        seen.add(k);
+                        out.push(k);
+                    }
+                    return out.length === keys.length ? keys : out;
+                };
+                const wrappedHandlers = new WeakSet();
+                const SafeProxy = new NativeProxy(NativeProxy, {
+                    construct(target, args) {
+                        let handler = args[1];
+                        if (handler && typeof handler === 'object' && typeof handler.ownKeys === 'function' && !wrappedHandlers.has(handler)) {
+                            const origOwnKeys = handler.ownKeys;
+                            try {
+                                // ハンドラが凍結されていても動くよう、プロトタイプ継承のコピーを渡す
+                                const copy = Object.create(handler);
+                                copy.ownKeys = function () {
+                                    return dedupeKeys(origOwnKeys.apply(this === copy ? handler : this, arguments));
+                                };
+                                wrappedHandlers.add(copy);
+                                handler = copy;
+                            } catch (e) {}
+                        }
+                        return new NativeProxy(args[0], handler);
+                    },
+                    get(target, prop, receiver) {
+                        if (prop === '__ir1ProxyWrapped') return true;
+                        return Reflect.get(target, prop, receiver);
+                    },
+                });
+                globalScope.Proxy = SafeProxy;
+            }
+        } catch (e) {}
+
         const applyPostUvPatches = () => {
             const __uv = globalScope.__uv;
             if (!__uv || globalScope.__ir1PostUvApplied) return false;
             globalScope.__ir1PostUvApplied = true;
+
+            // 0') UV が Object.prototype に定義する location / parent / top / eval のゲッターは、
+            //     this が window の Proxy（G123 の qiankun サンドボックス等）のとき `this.location` を
+            //     そのまま呼んで「Illegal invocation」になる（Window の本物のゲッターをレシーバー違いで呼ぶため）。
+            //     → 例外時は UV の値（proxy 化された location 等）にフォールバックするよう差し替える。
+            try {
+                const m = __uv.methods || {};
+                const realWin = globalScope;
+                const objProto = realWin.Object && realWin.Object.prototype;
+                const fallbacks = {
+                    location: () => __uv.location,
+                    eval: () => __uv.eval,
+                    parent: () => realWin.parent,
+                    top: () => realWin.top,
+                };
+                if (objProto) {
+                    for (const key of Object.keys(fallbacks)) {
+                        const name = m[key];
+                        if (!name) continue;
+                        const desc = Object.getOwnPropertyDescriptor(objProto, name);
+                        if (!desc || typeof desc.get !== 'function' || desc.get.__ir1Safe) continue;
+                        const origGet = desc.get;
+                        const safeGet = function () {
+                            try {
+                                return origGet.call(this);
+                            } catch (err) {
+                                return fallbacks[key]();
+                            }
+                        };
+                        safeGet.__ir1Safe = true;
+                        Object.defineProperty(objProto, name, {
+                            configurable: true,
+                            enumerable: desc.enumerable,
+                            get: safeGet,
+                            set: desc.set,
+                        });
+                    }
+                }
+            } catch (e) {}
 
             // 1) navigator.onLine を常に true に補正（サンドボックス / プロキシ環境で G123 や各種ゲームが
             //    navigator.onLine === false と誤判定してオフライン画面や通信停止になるのを防止）
@@ -406,7 +493,12 @@
                     // G123 や各種 SPA が自サイト用の SW を登録しようとして SecurityError で落ちるのを防ぐ安全なスタブ
                     if (globalScope.navigator) {
                         const fakeReady = new Promise(() => {});
-                        const fakeSWContainer = Object.create(EventTarget.prototype, {
+                        // ⚠ Object.create(EventTarget.prototype) は本物の EventTarget ではないため、
+                        //    addEventListener を呼ぶと「Illegal invocation」になる（G123 の Workbox が
+                        //    navigator.serviceWorker.addEventListener('message', ...) で即死していた）。
+                        //    → 本物の EventTarget インスタンスにプロパティを定義する。
+                        const fakeSWContainer = new EventTarget();
+                        Object.defineProperties(fakeSWContainer, {
                             controller: { get: () => null, enumerable: true },
                             ready: { get: () => fakeReady, enumerable: true },
                             register: {

@@ -12,3 +12,5 @@ static/worksheets/data/*.json
 # OS / エディタ
 .DS_Store
 *.log
+.diag/
+static/__diag/
