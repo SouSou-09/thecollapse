@@ -214,6 +214,7 @@ const APP_OWN_PREFIXES = [
   '/pwa-sw.js',
   '/manifest.webmanifest',
   '/favicon.ico',
+  '/__diag/',
 ];
 
 function tryRescueUnrewrittenRequest(event) {

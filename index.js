@@ -207,7 +207,38 @@ app.use("/uv/", express.static(uv1Path));
 
 // IR V1（UV V3ベースエンジン）を /ir1-service/ で配信。
 // 既存の /service/（v1.0.11・static/uv1 に退避済み）はそのまま維持。
-for (const kind of ["bundle", "client", "handler", "sw"]) {
+// 【UV rewriter 不具合パッチ】
+// UV の Identifier ハンドラは MethodDefinition のキーは除外するが、クラスフィールド宣言
+// (PropertyDefinition) のキーを除外しないため、`class A { location; }` が
+// `class A { __uv.$get(location); }` に書き換えられ SyntaxError になる
+// (Call of War のログイン後ゲーム本体 model.*.js が読み込めず真っ白になる原因)。
+// node_modules は直接編集できないため、配信時にバンドルへパッチを当てる。
+let patchedBundleCache = null;
+async function getPatchedBundle() {
+  if (patchedBundleCache) return patchedBundleCache;
+  const src = await readFile(join(uvPath, "uv.bundle.js"), "utf8");
+  const needle = 'a.type==="MethodDefinition"||a.type==="ClassDeclaration"';
+  const repl = 'a.type==="MethodDefinition"||a.type==="PropertyDefinition"&&a.key===r&&!a.computed||a.type==="ClassDeclaration"';
+  if (!src.includes(needle)) {
+    console.warn("[ir1] UV bundle patch target not found (UV updated?). Serving unpatched bundle.");
+    patchedBundleCache = src;
+  } else {
+    patchedBundleCache = src.split(needle).join(repl);
+  }
+  return patchedBundleCache;
+}
+app.get(["/ir1/ir.bundle.js", "/ir1/uv.bundle.js"], async (req, res) => {
+  try {
+    const body = await getPatchedBundle();
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(body);
+  } catch (e) {
+    console.error("bundle patch error:", e);
+    res.sendFile(join(uvPath, "uv.bundle.js"));
+  }
+});
+for (const kind of ["client", "handler", "sw"]) {
   app.get(`/ir1/ir.${kind}.js`, (req, res) => {
     res.sendFile(join(uvPath, `uv.${kind}.js`));
   });
