@@ -14,9 +14,9 @@ import { attachAuthRoutes, getSessionUser } from "./auth.js";
 import { attachSnsRoutes } from "./sns.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
-// v1（現行エンジン）のdist退避先と、IR V1用カスタムconfigの場所
+// v1（現行エンジン）のdist退避先と、XR V1用カスタムconfigの場所
 const uv1Path = fileURLToPath(new URL("./static/uv1/", import.meta.url));
-const ir1CustomPath = fileURLToPath(new URL("./static/ir1/", import.meta.url));
+const xr1CustomPath = fileURLToPath(new URL("./static/xr1/", import.meta.url));
 const baremuxPath = fileURLToPath(new URL("./node_modules/@mercuryworkshop/bare-mux/dist/", import.meta.url));
 const dataPath = fileURLToPath(new URL("./static/worksheets/data/", import.meta.url));
 const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
@@ -24,7 +24,7 @@ const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
 // WebSocket のアップグレード要求が Node 既定の `Connection: keep-alive` で送られ、
 // 上流が101を返さず「Remote did not upgrade the WebSocket」になる。
 // → `Upgrade` ヘッダー付きの要求だけ `Connection: Upgrade` を付与するエージェントを使う。
-// （IR V1 経由で Call of War 等のWebSocketゲームを動かすために必要）
+// （XR V1 経由で Call of War 等のWebSocketゲームを動かすために必要）
 // さらに、YouTube / Google 等は Set-Cookie や Link ヘッダーで Node 既定の 16KB を超える応答ヘッダーを返し、
 // 「Parse Error: Header overflow」(bare server error 500) になる。→ 上流応答のヘッダー上限を引き上げる。
 //   ClientRequest#maxHeaderSize はソケット割り当て前（addRequest 時点）に設定すれば有効。
@@ -193,19 +193,19 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
-// ⚠ express.static より前に置くこと。後ろだと static が先に /ir1/sw.js を返し、
-// Service-Worker-Allowed が付かず /ir1-service/ スコープで登録できない。
-app.get("/ir1/sw.js", (req, res) => {
-  res.setHeader("Service-Worker-Allowed", "/ir1-service/");
+// ⚠ express.static より前に置くこと。後ろだと static が先に /xr1/sw.js を返し、
+// Service-Worker-Allowed が付かず /xr1-service/ スコープで登録できない。
+app.get("/xr1/sw.js", (req, res) => {
+  res.setHeader("Service-Worker-Allowed", "/xr1-service/");
   res.setHeader("Cache-Control", "no-cache");
   // 広告ブロック対応のカスタムSW（標準の dist/sw.js に広告ブロックを追加したもの）
-  res.sendFile(ir1CustomPath + "sw.js");
+  res.sendFile(xr1CustomPath + "sw.js");
 });
 app.use(express.static(publicPath));
 app.use("/worksheets/uv/", express.static(uv1Path));
 app.use("/uv/", express.static(uv1Path));
 
-// IR V1（UV V3ベースエンジン）を /ir1-service/ で配信。
+// XR V1（UV V3ベースエンジン）を /xr1-service/ で配信。
 // 既存の /service/（v1.0.11・static/uv1 に退避済み）はそのまま維持。
 // 【UV rewriter 不具合パッチ】
 // UV の Identifier ハンドラは MethodDefinition のキーは除外するが、クラスフィールド宣言
@@ -220,14 +220,14 @@ async function getPatchedBundle() {
   const needle = 'a.type==="MethodDefinition"||a.type==="ClassDeclaration"';
   const repl = 'a.type==="MethodDefinition"||a.type==="PropertyDefinition"&&a.key===r&&!a.computed||a.type==="ClassDeclaration"';
   if (!src.includes(needle)) {
-    console.warn("[ir1] UV bundle patch target not found (UV updated?). Serving unpatched bundle.");
+    console.warn("[xr1] UV bundle patch target not found (UV updated?). Serving unpatched bundle.");
     patchedBundleCache = src;
   } else {
     patchedBundleCache = src.split(needle).join(repl);
   }
   return patchedBundleCache;
 }
-app.get(["/ir1/ir.bundle.js", "/ir1/uv.bundle.js"], async (req, res) => {
+app.get(["/xr1/xr.bundle.js", "/xr1/uv.bundle.js"], async (req, res) => {
   try {
     const body = await getPatchedBundle();
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
@@ -239,15 +239,15 @@ app.get(["/ir1/ir.bundle.js", "/ir1/uv.bundle.js"], async (req, res) => {
   }
 });
 for (const kind of ["client", "handler", "sw"]) {
-  app.get(`/ir1/ir.${kind}.js`, (req, res) => {
+  app.get(`/xr1/xr.${kind}.js`, (req, res) => {
     res.sendFile(join(uvPath, `uv.${kind}.js`));
   });
-  app.get(`/ir1/uv.${kind}.js.map`, (req, res) => {
+  app.get(`/xr1/uv.${kind}.js.map`, (req, res) => {
     res.sendFile(join(uvPath, `uv.${kind}.js.map`));
   });
 }
-app.use("/ir1/", express.static(ir1CustomPath));
-app.use("/ir1/", express.static(uvPath));
+app.use("/xr1/", express.static(xr1CustomPath));
+app.use("/xr1/", express.static(uvPath));
 app.use("/baremux/", express.static(baremuxPath));
 
 // bare v2 / v3 のHTTPリクエストで x-bare-headers（分割された x-bare-headers-0, -1 ... 含む）に

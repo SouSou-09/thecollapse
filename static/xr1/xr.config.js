@@ -1,9 +1,9 @@
 /*global Ultraviolet*/
-// IR V1 (UV V3ベース) 設定・互換パッチファイル
+// XR V1 (UV V3ベース) 設定・互換パッチファイル
 // ページ(window) / Dedicated Worker / SharedWorker / Service Worker のすべてで共通して読み込まれる。
 (function () {
-    const PREFIX = '/ir1-service/';
-    const LEGACY_PREFIXES = ['/ir1-service/', '/service3/'];
+    const PREFIX = '/xr1-service/';
+    const LEGACY_PREFIXES = ['/xr1-service/', '/service3/'];
     const PASS_THROUGH_SCHEMES = /^(#|about:|data:|mailto:|tel:|blob:|ws:|wss:)/i;
 
     function base64Encode(url) {
@@ -97,13 +97,68 @@
 
     // ── BareClient パッチ（UV v3 内蔵 bare-mux v2.1.6 のバグ修正） ──
     function patchBareClientClass(BareClient) {
-        if (!BareClient || BareClient.__ir1Patched) return;
-        BareClient.__ir1Patched = true;
+        if (!BareClient || BareClient.__xr1Patched) return;
+        BareClient.__xr1Patched = true;
 
         // UV v3 内蔵の createWebSocket(url, protocols=[], ...) は `new WebSocket(url, undefined)` が渡った際
         // デフォルト引数が効くが、`null` や空文字列 `""` が第2引数に渡された際 `protocols = [""]` にしてしまい、
         // サブプロトコル検証 `Z0("")` は true で通過し、そのまま空文字サブプロトコルでサーバーへ送って
         // RFC 6455 違反エラーを起こすバグがある。また ArrayBufferView 以外の Blob 送信にも対応させる。
+        // 【POST が全て 500 になる問題の修正】
+        // UV 内蔵の BareClient#fetch は `new Request(url, init).body`（ReadableStream）を
+        // postMessage の transfer list に入れて bare-mux へ渡す。iPad / iPhone など
+        // ReadableStream を transfer できない WebKit 環境では DataCloneError で例外になり、
+        // Service Worker が 500 を返す（GET / HEAD はボディが無いので成功する）。
+        // → ボディを ArrayBuffer に実体化してから送る。リダイレクト追従で再送しても
+        //   detach されないよう、毎回コピーを渡す。
+        const origFetch = BareClient.prototype.fetch;
+        const REDIRECT_STATUS = [301, 302, 303, 307, 308];
+        const NULL_BODY_STATUS = [101, 204, 205, 304];
+        if (typeof origFetch === 'function') {
+            BareClient.prototype.fetch = async function (url, init) {
+                let req;
+                try { req = new Request(url, init); } catch (e) { return origFetch.call(this, url, init); }
+                let target;
+                try { target = new URL(req.url); } catch (e) { return origFetch.call(this, url, init); }
+                const method = String(req.method || 'GET').toUpperCase();
+                const worker = this && this.worker;
+                // blob: URL は元実装に任せる。ボディが無い場合も元実装で問題ない。
+                if (target.protocol.startsWith('blob:') || !worker || typeof worker.sendMessage !== 'function' ||
+                    method === 'GET' || method === 'HEAD') {
+                    return origFetch.call(this, url, init);
+                }
+                const rawHeaders = (init && init.headers) || req.headers;
+                const headers = rawHeaders instanceof Headers ? Object.fromEntries(rawHeaders) : rawHeaders;
+                let buf = null;
+                try {
+                    if (req.body) buf = await req.arrayBuffer();
+                } catch (e) { buf = null; }
+
+                let current = target;
+                for (let i = 0; ; i++) {
+                    const payload = buf && buf.byteLength ? buf.slice(0) : undefined;
+                    const msg = { type: 'fetch', fetch: { remote: current.toString(), method, headers, body: payload } };
+                    const res = (await worker.sendMessage(msg, payload ? [payload] : [])).fetch;
+                    const response = new Response(NULL_BODY_STATUS.includes(res.status) ? undefined : res.body, {
+                        headers: new Headers(res.headers),
+                        status: res.status,
+                        statusText: res.statusText,
+                    });
+                    response.rawHeaders = res.headers;
+                    response.finalURL = current.toString();
+                    const redirect = (init && init.redirect) || req.redirect;
+                    if (!REDIRECT_STATUS.includes(response.status)) return response;
+                    if (redirect === 'follow') {
+                        const loc = response.headers.get('location');
+                        if (i < 20 && loc !== null) { current = new URL(loc, current); continue; }
+                        throw new TypeError('Failed to fetch');
+                    }
+                    if (redirect === 'error') throw new TypeError('Failed to fetch');
+                    return response;
+                }
+            };
+        }
+
         const origCreateWS = BareClient.prototype.createWebSocket;
         if (typeof origCreateWS === 'function') {
             BareClient.prototype.createWebSocket = function (url, protocols, webSocketImpl, requestHeaders) {
@@ -114,8 +169,8 @@
                         : [String(protocols)];
                 }
                 const bws = origCreateWS.call(this, url, normProtos, webSocketImpl, requestHeaders);
-                if (bws && !bws.__ir1PatchedSend) {
-                    bws.__ir1PatchedSend = true;
+                if (bws && !bws.__xr1PatchedSend) {
+                    bws.__xr1PatchedSend = true;
                     // barews の open イベント時に確定したサブプロトコルを保持できるよう補正
                     bws.addEventListener('open', () => {
                         if (typeof bws.protocols === 'string') {
@@ -142,8 +197,8 @@
 
     // ── Ultraviolet プロトタイプ互換パッチ（UV v3.2.10 既知バグの網羅修正） ──
     function patchUltravioletClass(UV) {
-        if (!UV || UV.__ir1Patched) return;
-        UV.__ir1Patched = true;
+        if (!UV || UV.__xr1Patched) return;
+        UV.__xr1Patched = true;
 
         if (UV.BareClient) {
             patchBareClientClass(UV.BareClient);
@@ -179,7 +234,7 @@
             const origin = (meta && meta.origin) || (this.meta && this.meta.origin) || (typeof location !== 'undefined' ? location.origin : '');
             const prefix = this.prefix || PREFIX;
 
-            // 既にプロキシ化済みの URL（/ir1-service/... または origin + /ir1-service/...）なら二重エンコードしない
+            // 既にプロキシ化済みの URL（/xr1-service/... または origin + /xr1-service/...）なら二重エンコードしない
             const already = extractEncodedPart(str, prefix, origin);
             if (already !== null) {
                 const dec = safeDecodeUrl(already);
@@ -355,10 +410,10 @@
 
     // ── クライアント側（window および Web Worker 共通）追加パッチ ──
     function patchRuntimeEnvironment(globalScope) {
-        if (!globalScope || globalScope.__ir1EnvPatched) return;
+        if (!globalScope || globalScope.__xr1EnvPatched) return;
         // Service Worker 自身（UVServiceWorker スコープ）には適用しない
         if (typeof ServiceWorkerGlobalScope !== 'undefined' && globalScope instanceof ServiceWorkerGlobalScope) return;
-        globalScope.__ir1EnvPatched = true;
+        globalScope.__xr1EnvPatched = true;
 
         const isWindow = typeof globalScope.window !== 'undefined' && !!globalScope.document;
 
@@ -370,7 +425,7 @@
         //    ※ __uv の準備を待たず、ゲームのスクリプトが走る前に即時適用する。
         try {
             const NativeProxy = globalScope.Proxy;
-            if (typeof NativeProxy === 'function' && !NativeProxy.__ir1ProxyWrapped) {
+            if (typeof NativeProxy === 'function' && !NativeProxy.__xr1ProxyWrapped) {
                 const dedupeKeys = (keys) => {
                     if (!keys || typeof keys.length !== 'number') return keys;
                     const seen = new Set();
@@ -402,7 +457,7 @@
                         return new NativeProxy(args[0], handler);
                     },
                     get(target, prop, receiver) {
-                        if (prop === '__ir1ProxyWrapped') return true;
+                        if (prop === '__xr1ProxyWrapped') return true;
                         return Reflect.get(target, prop, receiver);
                     },
                 });
@@ -412,8 +467,8 @@
 
         const applyPostUvPatches = () => {
             const __uv = globalScope.__uv;
-            if (!__uv || globalScope.__ir1PostUvApplied) return false;
-            globalScope.__ir1PostUvApplied = true;
+            if (!__uv || globalScope.__xr1PostUvApplied) return false;
+            globalScope.__xr1PostUvApplied = true;
 
             // 0') UV が Object.prototype に定義する location / parent / top / eval のゲッターは、
             //     this が window の Proxy（G123 の qiankun サンドボックス等）のとき `this.location` を
@@ -434,7 +489,7 @@
                         const name = m[key];
                         if (!name) continue;
                         const desc = Object.getOwnPropertyDescriptor(objProto, name);
-                        if (!desc || typeof desc.get !== 'function' || desc.get.__ir1Safe) continue;
+                        if (!desc || typeof desc.get !== 'function' || desc.get.__xr1Safe) continue;
                         const origGet = desc.get;
                         const safeGet = function () {
                             try {
@@ -443,7 +498,7 @@
                                 return fallbacks[key]();
                             }
                         };
-                        safeGet.__ir1Safe = true;
+                        safeGet.__xr1Safe = true;
                         Object.defineProperty(objProto, name, {
                             configurable: true,
                             enumerable: desc.enumerable,
@@ -535,7 +590,7 @@
                     for (const proto of [docProto, htmlDocProto]) {
                         if (!proto) continue;
                         const desc = Object.getOwnPropertyDescriptor(proto, 'cookie');
-                        if (desc && typeof desc.get === 'function' && typeof desc.set === 'function' && !desc.get.__ir1CookieWrapped) {
+                        if (desc && typeof desc.get === 'function' && typeof desc.set === 'function' && !desc.get.__xr1CookieWrapped) {
                             const origGet = desc.get;
                             const origSet = desc.set;
                             const wrappedGet = function () {
@@ -559,7 +614,7 @@
                                 }
                                 return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
                             };
-                            wrappedGet.__ir1CookieWrapped = true;
+                            wrappedGet.__xr1CookieWrapped = true;
                             const wrappedSet = function (v) {
                                 const r = origSet.call(this, v);
                                 // JS 側で document.cookie に書き込まれたら __latestCookieStr も再計算予約
@@ -599,7 +654,7 @@
             //    - UV v3 が第2引数未指定時に protocols=[undefined] -> ["undefined"] を送ってしまうバグの根絶
             try {
                 const OrigWS = globalScope.WebSocket;
-                if (typeof OrigWS === 'function' && !OrigWS.__ir1WsWrapped) {
+                if (typeof OrigWS === 'function' && !OrigWS.__xr1WsWrapped) {
                     const WrappedWS = function (url, protocols) {
                         let u = String(url);
                         try {
@@ -616,7 +671,7 @@
                         return new OrigWS(u, protocols);
                     };
                     WrappedWS.prototype = OrigWS.prototype;
-                    WrappedWS.__ir1WsWrapped = true;
+                    WrappedWS.__xr1WsWrapped = true;
                     Object.defineProperties(WrappedWS, {
                         CONNECTING: { value: 0, enumerable: true },
                         OPEN: { value: 1, enumerable: true },
@@ -629,7 +684,7 @@
 
             // 4) new Worker(url, { type: 'module' }) へのフォールバック（UV の worker 注入は importScripts を
             //    使うため module worker のままだと SyntaxError / TypeError で起動できないゲームがある）
-            if (isWindow && typeof globalScope.Worker === 'function' && !globalScope.Worker.__ir1WorkerWrapped) {
+            if (isWindow && typeof globalScope.Worker === 'function' && !globalScope.Worker.__xr1WorkerWrapped) {
                 try {
                     const OrigWorker = globalScope.Worker;
                     const WrappedWorker = function (scriptURL, options) {
@@ -641,7 +696,7 @@
                         return arguments.length > 1 ? new OrigWorker(scriptURL, options) : new OrigWorker(scriptURL);
                     };
                     WrappedWorker.prototype = OrigWorker.prototype;
-                    WrappedWorker.__ir1WorkerWrapped = true;
+                    WrappedWorker.__xr1WorkerWrapped = true;
                     globalScope.Worker = WrappedWorker;
                 } catch (e) {}
             }
@@ -664,11 +719,11 @@
         bare: '/bare/',
         encodeUrl: base64Encode,
         decodeUrl: safeDecodeUrl,
-        handler: '/ir1/ir.handler.js',
-        client: '/ir1/ir.client.js',
-        bundle: '/ir1/ir.bundle.js',
-        config: '/ir1/ir.config.js',
-        sw: '/ir1/ir.sw.js',
+        handler: '/xr1/xr.handler.js',
+        client: '/xr1/xr.client.js',
+        bundle: '/xr1/xr.bundle.js',
+        config: '/xr1/xr.config.js',
+        sw: '/xr1/xr.sw.js',
         construct(uv, _context) {
             try {
                 if (uv && uv.constructor) patchUltravioletClass(uv.constructor);

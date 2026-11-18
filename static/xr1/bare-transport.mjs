@@ -247,7 +247,7 @@ export default class BareTransport {
 
   async init() {
     this.ready = true;
-    console.log('[ir1] bare-transport v13 loaded');
+    console.log('[xr1] bare-transport v13 loaded');
   }
 
   async request(remote, method, body, headers, signal) {
@@ -301,7 +301,7 @@ export default class BareTransport {
       }
       outHeaders[lk] = v;
     }
-    outHeaders['x-ir1-transport'] = 'v13';
+    outHeaders['x-xr1-transport'] = 'v13';
 
     return {
       body: [101, 204, 205, 304].includes(status) ? null : r.body,

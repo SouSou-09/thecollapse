@@ -9,7 +9,7 @@
    下記の除外パスは厳守する。
 */
 
-const CACHE = "thecollapse-shell-v21";
+const CACHE = "thecollapse-shell-v22";
 
 // オフラインでも開けるよう最低限キャッシュするアプリシェル
 const SHELL = [
@@ -53,8 +53,8 @@ function shouldBypass(url) {
     p.startsWith("/service/") ||      // UV プロキシ (__uv$config.prefix)
     p.startsWith("/bare/") ||         // Bare サーバー
     p.startsWith("/uv/") ||           // UV アセット
-    p.startsWith("/ir1/") ||          // IR V1 アセット / SW
-    p.startsWith("/ir1-service/") ||  // IR V1 プロキシ
+    p.startsWith("/xr1/") ||          // XR V1 アセット / SW
+    p.startsWith("/xr1-service/") ||  // XR V1 プロキシ
     p.startsWith("/baremux/") ||      // bare-mux
     p.startsWith("/worksheets/") ||   // ブラウザUI/データ/チャット等(動的)
     p.startsWith("/api/") ||          // News / Version API
