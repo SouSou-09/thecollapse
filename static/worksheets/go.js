@@ -101,14 +101,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       try { console.warn('[go] loadTabsFromStorage timeout/fail:', e && e.message); } catch {}
     }
 
-    // 復号用にIR V1コーデックを読み込む（保存済みURLの符号方式の自動判定に使う）
-    try { await _ir1(); } catch {}
+    // 復号用にXR V1コーデックを読み込む（保存済みURLの符号方式の自動判定に使う）
+    try { await _xr1(); } catch {}
 
     if (initialURL) {
       // 保存済みURLの符号方式を自動判定する（エンジン切替の前後で古いタブが壊れないように）。
-      // IR V1(/ir1-service/)=base64、従来(/service/)=XOR。
+      // XR V1(/xr1-service/)=base64、従来(/service/)=XOR。
       // 判定は「前方一致」だけでは不十分: デコード結果が https:// で始まるだけの壊れた
-      // バイナリ混じり文字列を IR V1 と誤判定し、SW側の atob で InvalidCharacterError
+      // バイナリ混じり文字列を XR V1 と誤判定し、SW側の atob で InvalidCharacterError
       // エラーページになる事故があった。そこで
       //   (1) デコード結果が print ASCIIのみの完全な http(s) URL であること
       //   (2) 再符号化したら元の文字列と完全一致する（round-trip）こと
@@ -117,7 +117,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       const strictHttpUrl = (s) => typeof s === 'string' && /^https?:\/\/[!-~]+$/i.test(s);
       let decodedInitial = null;
       try {
-        const bIr = window.IR1 && window.IR1.codec && window.IR1.codec.base64;
+        const bIr = window.XR1 && window.XR1.codec && window.XR1.codec.base64;
         if (bIr && typeof bIr.decode === 'function') {
           const dIr = bIr.decode(initialURL);
           if (strictHttpUrl(dIr) && bIr.encode(dIr) === initialURL) decodedInitial = dIr;
@@ -494,13 +494,13 @@ function onFrameLoad(tabId, iframe) {
 function decodeProxyUrl(src) {
   if (!src) return '';
   try {
-    for (const p of ['/ir1-service/', '/service3/']) {
+    for (const p of ['/xr1-service/', '/service3/']) {
       const idx = src.indexOf(p);
-      if (idx >= 0 && window.IR1) {
-        // フルURL(http://host/ir1-service/xxx)でも相対(/ir1-service/xxx)でも復号する
+      if (idx >= 0 && window.XR1) {
+        // フルURL(http://host/xr1-service/xxx)でも相対(/xr1-service/xxx)でも復号する
         let rest = src.slice(idx + p.length).split('#')[0];
         const q = rest.indexOf('?'); if (q >= 0) rest = rest.slice(0, q);
-        try { return window.IR1.codec.base64.decode(rest); } catch (e) {}
+        try { return window.XR1.codec.base64.decode(rest); } catch (e) {}
       }
     }
     if (src.includes('/service/') && typeof __uv$config !== 'undefined') {
@@ -752,17 +752,17 @@ function navigateTab(tabId, query) {
 
 
 // プロキシ(Service Worker)を使える状態にする。エンジン別にSW登録→有効化まで待つ。
-// IR V1エンジンはbare-muxのトランスポートも設定する。広告ブロックのON/OFFもSWへ伝える。
+// XR V1エンジンはbare-muxのトランスポートも設定する。広告ブロックのON/OFFもSWへ伝える。
 const _proxyReady = {};
 function ensureProxyReady() {
   const prefix = enginePrefix();
   if (_proxyReady[prefix]) return _proxyReady[prefix];
   const p = (async () => {
-    if (prefix === '/ir1-service/') {
+    if (prefix === '/xr1-service/') {
       try {
         const { BareMuxConnection } = await import('/baremux/index.mjs');
         const conn = new BareMuxConnection('/baremux/worker.js?v=13');
-        await conn.setTransport('/ir1/bare-transport.mjs?v=13', []);
+        await conn.setTransport('/xr1/bare-transport.mjs?v=13', []);
       } catch (e) { console.warn('[go] bare-mux init failed', e); }
     }
     const reg = await navigator.serviceWorker.register(engineSWUrl(), { scope: prefix });
@@ -1245,71 +1245,71 @@ async function loadTabsFromStorage() {
 }
 
 // ======= プロキシエンジン切替 =======
-// v1 = /service/（Ultraviolet 1.0.11・従来） / ir1 = /ir1-service/（IR V1: UV V3ベースエンジン）
-// 旧設定値 'v3' も 'ir1' として互換扱いする。
+// v1 = /service/（Ultraviolet 1.0.11・従来） / xr1 = /xr1-service/（XR V1: UV V3ベースのプロキシエンジン・既定）
+// 未設定(null)は XR V1。旧設定値 'ir1'（旧名 IR V1）・'v3' も 'xr1' として扱う。
 function isIrEngine() {
   try {
     const v = localStorage.getItem('dev_engine');
-    return v === 'ir1' || v === 'v3';
-  } catch (e) { return false; }
+    return v === null || v === 'xr1' || v === 'ir1' || v === 'v3';
+  } catch (e) { return true; }
 }
 function enginePrefix() {
-  return isIrEngine() ? '/ir1-service/' : '/service/';
+  return isIrEngine() ? '/xr1-service/' : '/service/';
 }
 function engineSWUrl() {
-  return enginePrefix() === '/ir1-service/' ? '/ir1/sw.js' : '/sw.js';
+  return enginePrefix() === '/xr1-service/' ? '/xr1/sw.js' : '/sw.js';
 }
-let _ir1Promise = null;
-function _ir1() {
-  if (window.IR1) return Promise.resolve(window.IR1);
-  if (!_ir1Promise) {
-    _ir1Promise = new Promise(resolve => {
+let _xr1Promise = null;
+function _xr1() {
+  if (window.XR1) return Promise.resolve(window.XR1);
+  if (!_xr1Promise) {
+    _xr1Promise = new Promise(resolve => {
       const s = document.createElement('script');
-      s.src = '/ir1/ir.bundle.js';
+      s.src = '/xr1/xr.bundle.js';
       s.onload = () => {
         // バンドルは UMD で window.Ultraviolet を生やす。将来のバージョンで
-        // エクスポート形状が変わっても undefined を IR1 に入れない。
+        // エクスポート形状が変わっても undefined を XR1 に入れない。
         const uv = window.Ultraviolet || (s.contentWindow && s.contentWindow.Ultraviolet) || null;
         if (uv && uv.codec && uv.codec.base64) {
-          window.IR1 = uv;
+          window.XR1 = uv;
         }
         try { delete window.Ultraviolet; } catch (e) {}
-        resolve(window.IR1 || null);
+        resolve(window.XR1 || null);
       };
       s.onerror = () => resolve(null);
       document.head.appendChild(s);
     });
   }
-  return _ir1Promise;
+  return _xr1Promise;
 }
-function _ir1Ready() {
-  return enginePrefix() === '/ir1-service/' ? _ir1() : Promise.resolve();
+function _xr1Ready() {
+  return enginePrefix() === '/xr1-service/' ? _xr1() : Promise.resolve();
 }
 function encodeForEngine(url) {
   try {
-    if (enginePrefix() === '/ir1-service/' && window.IR1) return window.IR1.codec.base64.encode(url);
+    if (enginePrefix() === '/xr1-service/' && window.XR1) return window.XR1.codec.base64.encode(url);
   } catch (e) {}
   return __uv$config.encodeUrl(url);
 }
 // URLからプロキシURLを構築する（エンジン設定に応じて符号方式も合わせる）。
-// IR V1コーデックが読み込めない場合は従来エンジン(/service/)で開くことで
+// XR V1コーデックが読み込めない場合は従来エンジン(/service/)で開くことで
 // 符号方式の不一致（atobエラー・Failed to load）を防ぐ。
 async function buildProxyUrl(url) {
-  if (enginePrefix() === '/ir1-service/') {
-    let ir1 = null;
-    try { ir1 = await _ir1(); } catch (e) { ir1 = null; }
-    const bIr = ir1 && ir1.codec && ir1.codec.base64;
+  if (enginePrefix() === '/xr1-service/') {
+    let xr1 = null;
+    try { xr1 = await _xr1(); } catch (e) { xr1 = null; }
+    const bIr = xr1 && xr1.codec && xr1.codec.base64;
     if (bIr && typeof bIr.encode === 'function' && typeof bIr.decode === 'function') {
       // round-trip検証: SW側と同じcodecで復号して元に戻ることを保証する。
-      // 復号が不一致・例外なら壊れた符号を /ir1-service/ に出さず従来エンジンへフォールバック。
+      // 復号が不一致・例外なら壊れた符号を /xr1-service/ に出さず従来エンジンへフォールバック。
       try {
         const enc = bIr.encode(url);
         if (typeof enc === 'string' && enc && bIr.decode(enc) === url) {
-          return '/ir1-service/' + enc;
+          return '/xr1-service/' + enc;
         }
-        try { console.warn('[engine] IR V1コーデックのround-trip検証に失敗したため従来エンジンで開きます'); } catch (e) {}
+        try { console.warn('[engine] XR V1コーデックのround-trip検証に失敗したため従来エンジンで開きます'); } catch (e) {}
       } catch (e) {
-        try { console.warn('[engine] IR V1コーデックで符号化できず従来エンジンで開きます:', e && e.message); } catch (e2) {}
+        try { console.warn('[engine] XR V1コーデックで符号化できず従来エンジンで開きます:', e && e.message); } catch (e2) {}
       }
     }
   }
@@ -1317,9 +1317,9 @@ async function buildProxyUrl(url) {
 }
 window.setEngine = function(name) {
   try {
-    const next = (name === 'ir1' || name === 'v3') ? 'ir1' : 'v1';
+    const next = (name === 'xr1' || name === 'ir1' || name === 'v3') ? 'xr1' : 'v1';
     localStorage.setItem('dev_engine', next);
-    console.warn('[engine] ' + (next === 'ir1' ? 'IR V1' : 'UV v1') + ' に切替。再読み込みで反映されます');
+    console.warn('[engine] ' + (next === 'xr1' ? 'XR V1' : 'UV v1') + ' に切替。再読み込みで反映されます');
   } catch (e) {}
 };
 

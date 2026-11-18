@@ -867,12 +867,12 @@ function navigate(url) {
   if (typeof __uv$config==='undefined') { window.open(url,'_blank'); return; }
   // ページ遷移せず、ブラウザUI(go.html)を全画面オーバーレイとして「埋め込む」。
   // アドレスバーは .com のまま（go.html へは飛ばさない）。
-  // go.html 側で現在のエンジン設定（従来 UV / IR V1）に合わせて SW 登録と符号化を行う。
+  // go.html 側で現在のエンジン設定（従来 UV / XR V1）に合わせて SW 登録と符号化を行う。
   const isIr = (() => {
-    try { const v = localStorage.getItem('dev_engine'); return v === 'ir1' || v === 'v3'; } catch { return false; }
+    try { const v = localStorage.getItem('dev_engine'); return v === null || v === 'xr1' || v === 'ir1' || v === 'v3'; } catch { return true; }
   })();
-  const swUrl = isIr ? '/ir1/sw.js' : '/sw.js';
-  const swScope = isIr ? '/ir1-service/' : __uv$config.prefix;
+  const swUrl = isIr ? '/xr1/sw.js' : '/sw.js';
+  const swScope = isIr ? '/xr1-service/' : __uv$config.prefix;
   window.navigator.serviceWorker.register(swUrl, { scope: swScope })
     .then(()=>{ sessionStorage.setItem('uvURL',__uv$config.encodeUrl(url)); openBrowser('./worksheets/go.html'); })
     .catch(()=>{ sessionStorage.setItem('uvURL',__uv$config.encodeUrl(url)); openBrowser('./worksheets/go.html'); });

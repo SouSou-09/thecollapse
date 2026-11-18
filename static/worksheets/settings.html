@@ -518,12 +518,12 @@ nav {
   <div class="setting-card">
     <div class="setting-info">
       <div class="setting-label">プロキシエンジン</div>
-      <div class="setting-desc">使用するプロキシエンジンを切り替えます。変更は再読み込み後に反映されます。サイトが表示できなくなった場合は「従来（Ultraviolet 1.0）」に戻してください。</div>
+      <div class="setting-desc">使用するプロキシエンジンを切り替えます。変更は再読み込み後に反映されます。XR V1 が既定です。サイトが表示できなくなった場合は「従来（Ultraviolet 1.0）」に切り替えてください。</div>
     </div>
     <div class="setting-control">
       <select class="styled-select" id="uv-engine-select">
+        <option value="xr1">XR V1（推奨）</option>
         <option value="v1">従来（Ultraviolet 1.0）</option>
-        <option value="ir1">IR V1</option>
       </select>
     </div>
   </div>
@@ -1042,9 +1042,10 @@ async function saveNPrefs() {
   if (!sel) return;
   try {
     var cur = localStorage.getItem('dev_engine');
-    sel.value = (cur === 'ir1' || cur === 'v3') ? 'ir1' : 'v1';
-    if (cur === 'v3') localStorage.setItem('dev_engine', 'ir1');
-  } catch (e) { sel.value = 'v1'; }
+    // 未設定は XR V1（既定）。旧設定値 'ir1' / 'v3' は 'xr1' に移行する。
+    sel.value = (cur === null || cur === 'xr1' || cur === 'ir1' || cur === 'v3') ? 'xr1' : 'v1';
+    if (cur === 'v3' || cur === 'ir1') localStorage.setItem('dev_engine', 'xr1');
+  } catch (e) { sel.value = 'xr1'; }
   sel.addEventListener('change', function(){
     try { localStorage.setItem('dev_engine', sel.value); } catch (e) {}
     if (typeof showToast === 'function') showToast('保存しました（再読み込みで反映されます）');

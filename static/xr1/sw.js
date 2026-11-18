@@ -1,12 +1,12 @@
 /*global UVServiceWorker,__uv$config*/
-// TheCollapse: IR V1（UV V3ベース）用 Service Worker（広域互換・広告ブロック対応版）
-importScripts('/ir1/ir.bundle.js');
-importScripts('/ir1/ir.config.js');
-importScripts(__uv$config.sw || '/ir1/ir.sw.js');
+// TheCollapse: XR V1（UV V3ベース）用 Service Worker（広域互換・広告ブロック対応版）
+importScripts('/xr1/xr.bundle.js');
+importScripts('/xr1/xr.config.js');
+importScripts(__uv$config.sw || '/xr1/xr.sw.js');
 importScripts('/worksheets/adblock-rules.js');
 importScripts('/worksheets/adblock-sw.js');
 
-const ir = new UVServiceWorker();
+const xr = new UVServiceWorker();
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 self.addEventListener('activate', (event) => {
@@ -35,7 +35,7 @@ const STRIP_SEC_RESPONSE_HEADERS = [
 const JS_MIME_RE = /^(application\/(javascript|x-javascript|ecmascript)|text\/(javascript|ecmascript|jscript|js))\b/i;
 
 // ── 1) リクエスト送信前フック（request） ──
-ir.on('request', (event) => {
+xr.on('request', (event) => {
   try {
     const ctx = event.data;
     if (!ctx || !ctx.headers || !ctx.url) return;
@@ -82,7 +82,7 @@ ir.on('request', (event) => {
 //   確定後に応答が返る。
 // - DuckDuckGo 等が HTML を HTTP 202 Accepted で返す場合の 200 正規化
 // - ES Module（`<script type="module">` / 動的 `import()`）の Strict MIME チェック失敗を防止
-ir.on('beforemod', async (event) => {
+xr.on('beforemod', async (event) => {
   try {
     const resCtx = event.data;
     if (!resCtx || !resCtx.headers) return;
@@ -129,7 +129,7 @@ ir.on('beforemod', async (event) => {
 // - 圧縮関連ヘッダー・セキュリティ制限ヘッダーの完全除去（206 Partial Content のみ非圧縮時の content-length を維持）
 // - SharedWorker（destination === 'sharedworker'）にも UV スクリプト注入と書き換えを適用
 // - CORS 許可ヘッダーを付与し、プロキシ内からの fetch / フォント / WebGL アセット取得を全面許可
-ir.on('response', (event) => {
+xr.on('response', (event) => {
   try {
     const resCtx = event.data;
     if (!resCtx || !resCtx.headers) return;
@@ -193,11 +193,11 @@ function sanitizeFinalResponse(res, dest) {
   });
 }
 
-// 書き換え漏れした相対パスが `/ir1-service/` 無しで同一オリジンへ飛んできた際、
-// referrer が `/ir1-service/` 配下なら元サイトの URL に復元してプロキシへ救済ルーティングする
+// 書き換え漏れした相対パスが `/xr1-service/` 無しで同一オリジンへ飛んできた際、
+// referrer が `/xr1-service/` 配下なら元サイトの URL に復元してプロキシへ救済ルーティングする
 const APP_OWN_PREFIXES = [
-  '/ir1/',
-  '/ir1-service/',
+  '/xr1/',
+  '/xr1-service/',
   '/service/',
   '/service3/',
   '/bare/',
@@ -253,7 +253,7 @@ function tryRescueUnrewrittenRequest(event) {
 }
 
 async function handleRequest(event) {
-  if (event.request.method === 'OPTIONS' && ir.route(event)) {
+  if (event.request.method === 'OPTIONS' && xr.route(event)) {
     return new Response(null, {
       status: 204,
       headers: {
@@ -266,7 +266,7 @@ async function handleRequest(event) {
     });
   }
 
-  if (ir.route(event)) {
+  if (xr.route(event)) {
     // YouTube が読み込む Web Animations ポリフィルはプロキシ内で
     // 「Cannot read properties of null (reading 'cancel')」を連発して描画を止める。
     // モダンブラウザは標準対応なので、ポリフィルだけ空スクリプトに差し替える。
@@ -282,7 +282,7 @@ async function handleRequest(event) {
     const dest = event.request.destination;
     const res = await self.TCAdblock.wrap(
       event,
-      () => ir.fetch(event),
+      () => xr.fetch(event),
       { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl }
     );
     return sanitizeFinalResponse(res, dest);
@@ -294,7 +294,7 @@ async function handleRequest(event) {
     const dest = event.request.destination;
     const res = await self.TCAdblock.wrap(
       fakeEvent,
-      () => ir.fetch(fakeEvent),
+      () => xr.fetch(fakeEvent),
       { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl }
     );
     return sanitizeFinalResponse(res, dest);
