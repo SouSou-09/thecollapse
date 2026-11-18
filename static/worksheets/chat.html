@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>TheCollapse - Chat</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/worksheets/chat.css">
@@ -276,6 +276,76 @@
   transition: border-color 0.15s, color 0.15s; font-family: 'Inter', sans-serif;
 }
 .bg-upload-label:hover { border-color: #3a4560; color: #e8ecf3; }
+
+/* ── スマートフォン向けチャットUI最適化（サイドバードロワー・ヘッダー折れ防止） ── */
+.mobile-channels-btn {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8ecf3;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+#chat-mobile-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.55);
+}
+@media (max-width: 640px) {
+  body { height: 100dvh; }
+  #main-nav {
+    padding: env(safe-area-inset-top, 0px) 10px 0;
+    height: calc(52px + env(safe-area-inset-top, 0px));
+  }
+  .nav-logo { font-size: 15px; gap: 6px; }
+  .version-badge { display: none; }
+  .nav-links { gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-btn { padding: 6px 8px; font-size: 12px; gap: 4px; white-space: nowrap; }
+  .nav-btn svg { display: none; }
+  #nav-account-label { display: none; }
+  #account-nav-btn { padding: 4px; border-radius: 50%; }
+  #ws-label { display: none; }
+  .ws-status { margin-left: 4px; padding: 4px 6px; border-left: none; }
+
+  .mobile-channels-btn { display: inline-flex; }
+  .chat-layout { position: relative; }
+  .sidebar {
+    display: flex !important;
+    position: fixed;
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    bottom: 0;
+    left: 0;
+    width: min(270px, 82vw) !important;
+    z-index: 90;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.55);
+  }
+  body.chat-drawer-open .sidebar { transform: translateX(0); }
+  body.chat-drawer-open #chat-mobile-scrim { display: block; }
+
+  .input-area {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  #msg-input,
+  #room-search,
+  .form-input {
+    font-size: 16px !important;
+  }
+  .modal {
+    width: 100% !important;
+    max-width: calc(100vw - 24px);
+    padding: 22px 18px 20px;
+  }
+}
 </style>
 </head>
 <body>
@@ -375,6 +445,7 @@
 </div>
 
 <!-- チャット本体 -->
+<div id="chat-mobile-scrim" onclick="document.body.classList.remove('chat-drawer-open')"></div>
 <div id="chat-app" style="display:none">
   <div class="chat-layout">
 
@@ -402,7 +473,10 @@
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div class="empty-title">チャンネルを選択</div>
-        <div class="empty-desc">左からチャンネルを選んでチャットを始めましょう</div>
+        <div class="empty-desc">チャンネルを選んでチャットを始めましょう</div>
+        <button type="button" class="mobile-channels-btn" style="width:auto;padding:0 16px;height:38px;margin-top:12px;gap:6px;font-size:13px;" onclick="document.body.classList.toggle('chat-drawer-open')">
+          ☰ チャンネル一覧を開く
+        </button>
       </div>
 
       <!-- メインチャット -->
@@ -411,6 +485,9 @@
         <!-- ヘッダー -->
         <header class="chat-header">
           <div class="chat-header-left">
+            <button type="button" class="mobile-channels-btn" onclick="document.body.classList.toggle('chat-drawer-open')" title="チャンネル一覧" aria-label="チャンネル一覧">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <div class="chat-header-avatar" id="chat-header-avatar"></div>
             <div>
               <div class="chat-header-name" id="chat-header-name"></div>

@@ -696,12 +696,15 @@ function render() {
 /* ── アクション ──────────────────────────────────────────── */
 function openRoom(id) {
   state.activeRoomId = id;
+  document.body.classList.remove('chat-drawer-open');
   const room = getRoom(id);
   if (room) room.unread = 0;
   wsSend({ type: 'join_room', roomId: id });
   render();
   adjustTextarea();
-  setTimeout(() => { $('msg-input')?.focus(); }, 50);
+  if (window.innerWidth > 640) {
+    setTimeout(() => { $('msg-input')?.focus(); }, 50);
+  }
 }
 
 let typingDebounce = null;

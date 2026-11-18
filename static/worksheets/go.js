@@ -91,6 +91,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       try { console.warn('[go] ensureProxyReady timeout/fail:', e && e.message); } catch {}
     }
 
+    try { localStorage.removeItem('tc_yt_edu_keys_v1'); } catch {}
+
     // 保存されたタブを復元、なければ新規
     _showLoading('タブを復元しています...');
     try {
@@ -137,32 +139,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         try { console.warn('[go] 復元用URLの符号を判定できなかったため復元をスキップ:', String(initialURL).slice(0, 60)); } catch (e) {}
       }
 
-      if (decodedInitial &&
-          typeof TC_YT_EDU !== 'undefined' &&
-          TC_YT_EDU.isYouTubeWatchUrl(decodedInitial)) {
-        const vid = TC_YT_EDU.extractVideoId(decodedInitial);
-        if (vid) {
-          // 空タブを作って、直接再生にスイッチ
-          const newId = createTab(null, true);
-          setTimeout(() => {
-            try { navigateTabYouTubeDirect(newId, decodedInitial, vid); } catch (e) {
-              try { console.warn('[YT-EDU] init direct play error:', e && e.message); } catch {}
-              // 失敗したら通常のプロキシ経路で開く
-              try {
-                const t = tabs.find(x => x.id === newId);
-                if (t) { t.url = fullURL; t.displayUrl = decodedInitial; }
-                setActiveTab(newId);
-              } catch {}
-            }
-          }, 30);
-        } else {
-          createTab(fullURL, true);
-        }
-      } else {
-        // どのサイトもアプリ内（ブラウザモード）のタブで開く。
-        // 新しいブラウザタブや about:blank のウィンドウは開かない。
-        createTab(fullURL, true);
-      }
+      // どのサイトもアプリ内（ブラウザモード）のタブでプロキシ経由で開く。
+      // 新しいブラウザタブや about:blank のウィンドウは開かない。
+      createTab(fullURL, true);
     } else if (tabs.length === 0) {
       createTab(null, false); // ニュータブ
     } else {
@@ -180,9 +159,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderBookmarkBtn();
     document.addEventListener('click', e => {
       // 「外側をクリックしたら閉じる」処理。
-      // どのボタンがどのパネルを開くかは data-panel-toggle 属性で示す。
-      // （以前は存在しないID（#bookmark-btn）を参照していたため、ブックマーク一覧は
-      //   開くボタンを押しても「開いた直後に閉じる」状態になっていた）
+      let changed = false;
       [
         ['#bookmark-panel', 'bookmark'],
         ['#history-panel', 'history'],
@@ -195,7 +172,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (panel.contains(e.target)) return;
         if (e.target.closest(`[data-panel-toggle="${key}"]`)) return;
         panel.classList.remove('open');
+        changed = true;
       });
+      const acctMenu = document.getElementById('go-account-menu');
+      if (acctMenu && acctMenu.style.display === 'block' && !acctMenu.contains(e.target)) {
+        acctMenu.style.display = 'none';
+        changed = true;
+      }
+      if (changed) _syncMobileScrim();
     });
   } catch (e) {
     try { console.error('[go] initialization error:', e); } catch {}
@@ -720,23 +704,7 @@ function navigateTab(tabId, query) {
     url = /^[a-z]+\.[a-z]{2,}$/i.test(query) ? 'https://' + query : ENGINES[currentEngine](query);
   }
 
-  // ★ YouTube の「動画再生通信」だけはプロキシをバイパスして直接接続する
-  //    (Education 用パラメーターを付与した embed iframe を使用)
-  //    検索 / ホーム / チャンネル等の通常通信は既存プロキシを維持する。
-  try {
-    if (typeof TC_YT_EDU !== 'undefined' &&
-        TC_YT_EDU.isYouTubeWatchUrl(url)) {
-      const vid = TC_YT_EDU.extractVideoId(url);
-      if (vid) {
-        navigateTabYouTubeDirect(tabId, url, vid);
-        return;
-      }
-    }
-  } catch (e) {
-    try { console.warn('[YT-EDU] direct play check failed:', e && e.message); } catch {}
-  }
-
-  // どのサイトもアプリ内（ブラウザモード）のタブで開く。
+  // どのサイトもアプリ内（ブラウザモード）のタブでプロキシ経由で開く。
   // 新しいブラウザタブや about:blank のウィンドウは開かない。
   if (typeof __uv$config === 'undefined') { return; }
   ensureProxyReady()
@@ -782,106 +750,6 @@ function navigateTab(tabId, query) {
     }).catch(err => console.error(err));
 }
 
-// ===== YouTube 動画再生用: プロキシをバイパスして直接接続でロード =====
-// 仕様:
-//  - youtube.com/watch, youtu.be, /embed, /shorts, /live を対象
-//  - edu/N.txt から取得した embed_config 等のパラメーターを付与
-//  - キー取得失敗時もフォールバックで再生継続(素の embed)
-function navigateTabYouTubeDirect(tabId, originalUrl, videoId) {
-  const tab = tabs.find(t => t.id === tabId);
-  if (!tab) return;
-  const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
-  if (!content) return;
-
-  // タブ表示の更新
-  tab.displayUrl = originalUrl;
-  tab.url = originalUrl;
-  tab.isNew = false;
-  tab.title = 'YouTube (Direct)';
-  try { tab.favicon = 'https://www.google.com/s2/favicons?domain=youtube.com&sz=32'; } catch {}
-  const addrEl = document.getElementById('address-input');
-  if (addrEl) addrEl.value = originalUrl;
-  saveTabsToStorage();
-  renderTabs();
-  addLog(`YouTube 直接再生: ${originalUrl.slice(0, 60)}`, 'info');
-  setLogStatus('active', 'Loading (direct)...');
-
-  // 既存内容を iframe に置換
-  content.innerHTML = '';
-  const iframe = document.createElement('iframe');
-  iframe.className = 'browser-frame';
-  iframe.id = 'frame-' + tabId;
-  iframe.setAttribute('allow',
-    'accelerometer; autoplay; clipboard-write; encrypted-media; ' +
-    'gyroscope; picture-in-picture; web-share');
-  iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-  iframe.onload = () => {
-        scheduleExtensions(iframe);
-    setLogStatus('idle', 'Ready');
-    addLog('YouTube 直接再生: 読み込み完了', 'ok');
-    // 履歴に記録(タイトルは取れない可能性が高いので URL のみ)
-    try {
-      addHistoryEntry({
-        title: 'YouTube - ' + (videoId || ''),
-        url: originalUrl,
-        favicon: 'https://www.google.com/s2/favicons?domain=youtube.com&sz=32'
-      });
-    } catch {}
-  };
-  iframe.onerror = () => {
-    addLog('YouTube 直接再生: 読み込み失敗 → プロキシにフォールバック', 'warn');
-    fallbackToProxy(tabId, originalUrl);
-  };
-  content.appendChild(iframe);
-
-  // Education キーを取得して URL を組み立て (非同期)
-  TC_YT_EDU.buildEmbedUrl(videoId, { autoplay: false })
-    .then(src => { iframe.src = src; })
-    .catch(err => {
-      try { console.warn('[YT-EDU] buildEmbedUrl error:', err && err.message); } catch {}
-      // 最後のフォールバック: 素の embed
-      iframe.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(videoId);
-    });
-}
-
-// プロキシ経由ロードへのフォールバック
-function fallbackToProxy(tabId, url) {
-  if (typeof __uv$config === 'undefined') return;
-  ensureProxyReady()
-    .then(async () => {
-      const proxyUrl = await buildProxyUrl(url);
-      const tab = tabs.find(t => t.id === tabId);
-      if (!tab) return;
-      const content = document.querySelector(`.tab-content[data-id="${tabId}"]`);
-      if (!content) return;
-      content.innerHTML = '';
-      const iframe = document.createElement('iframe');
-      iframe.className = 'browser-frame';
-      iframe.src = proxyUrl;
-      iframe.id = 'frame-' + tabId;
-      // window.open によるポップアップ(X の OAuth ログイン等)を許可するための権限。
-      iframe.setAttribute('allow',
-        'accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; ' +
-        'fullscreen; gyroscope; picture-in-picture; ' +
-        'web-share; publickey-credentials-get; screen-wake-lock');
-      iframe.setAttribute('referrerpolicy', 'same-origin');
-      iframe.onload = () => {
-        scheduleExtensions(iframe);
-        onFrameLoad(tabId, iframe);
-        // 内部ナビゲーション(SPA pushState等)追跡トラッカーを起動
-        attachFrameTracker(tabId, iframe);
-        if (window.DevTools) {
-          DevTools.watchFrame(tabId, iframe);
-          if (tabId === activeTabId) setTimeout(() => DevTools.refresh(), 100);
-        }
-      };
-      content.appendChild(iframe);
-      if (window.DevTools) DevTools.watchFrame(tabId, iframe);
-      tab.url = proxyUrl;
-      tab.displayUrl = url;
-    }).catch(err => console.error(err));
-}
-
 
 // プロキシ(Service Worker)を使える状態にする。エンジン別にSW登録→有効化まで待つ。
 // IR V1エンジンはbare-muxのトランスポートも設定する。広告ブロックのON/OFFもSWへ伝える。
@@ -893,8 +761,8 @@ function ensureProxyReady() {
     if (prefix === '/ir1-service/') {
       try {
         const { BareMuxConnection } = await import('/baremux/index.mjs');
-        const conn = new BareMuxConnection('/baremux/worker.js?v=11');
-        await conn.setTransport('/ir1/bare-transport.mjs?v=11', []);
+        const conn = new BareMuxConnection('/baremux/worker.js?v=13');
+        await conn.setTransport('/ir1/bare-transport.mjs?v=13', []);
       } catch (e) { console.warn('[go] bare-mux init failed', e); }
     }
     const reg = await navigator.serviceWorker.register(engineSWUrl(), { scope: prefix });
@@ -1050,8 +918,11 @@ function renderBookmarkBtn() {
 async function toggleBookmarkPanel() {
   const panel = document.getElementById('bookmark-panel');
   if (!panel) return;
-  const open = panel.classList.toggle('open');
-  if (open) {
+  const willOpen = !panel.classList.contains('open');
+  closeAllPanels();
+  if (willOpen) {
+    panel.classList.add('open');
+    _syncMobileScrim();
     renderBookmarkList();
     // ログイン中はまだ読み込めていないことがあるので、読み込んでから描き直す
     await _ensureBookmarksLoaded();
@@ -1105,7 +976,7 @@ function renderBookmarkList() {
 }
 
 function openBookmark(url) {
-  document.getElementById('bookmark-panel').classList.remove('open');
+  closeAllPanels();
   if (activeTabId) {
     navigateTab(activeTabId, url);
   } else {
@@ -1182,10 +1053,15 @@ function clearHistory() {
 
 function toggleHistoryPanel() {
   const panel = document.getElementById('history-panel');
-  const open = panel.classList.toggle('open');
-  if (open) {
+  if (!panel) return;
+  const willOpen = !panel.classList.contains('open');
+  closeAllPanels();
+  if (willOpen) {
+    panel.classList.add('open');
+    _syncMobileScrim();
     renderHistoryList();
-    document.getElementById('history-search').value = '';
+    const hs = document.getElementById('history-search');
+    if (hs) hs.value = '';
   }
 }
 
@@ -1290,7 +1166,7 @@ function clearHistorySearch() {
 }
 
 function openHistoryItem(url) {
-  document.getElementById('history-panel').classList.remove('open');
+  closeAllPanels();
   if (activeTabId) navigateTab(activeTabId, url);
   else { const id = createTab(null, true); setTimeout(() => navigateTab(id, url), 50); }
 }
@@ -1447,17 +1323,69 @@ window.setEngine = function(name) {
   } catch (e) {}
 };
 
+// ======= ポップアップパネル排他制御 & スクリム同期 =======
+function _syncMobileScrim() {
+  const scrim = document.getElementById('mobile-panel-scrim');
+  if (!scrim) return;
+  const anyOpen = [
+    '#bookmark-panel',
+    '#history-panel',
+    '#more-options-panel',
+    '#ext-panel',
+    '#cookie-panel',
+  ].some(sel => document.querySelector(sel)?.classList.contains('open')) ||
+    (document.getElementById('go-account-menu')?.style.display === 'block');
+  scrim.classList.toggle('open', anyOpen);
+}
+
+function closeAllPanels() {
+  ['#bookmark-panel', '#history-panel', '#more-options-panel', '#ext-panel', '#cookie-panel'].forEach(sel => {
+    document.querySelector(sel)?.classList.remove('open');
+  });
+  const acct = document.getElementById('go-account-menu');
+  if (acct) acct.style.display = 'none';
+  _syncMobileScrim();
+}
+
+function openSinglePanel(kind) {
+  closeAllPanels();
+  if (kind === 'bookmark') {
+    toggleBookmarkPanel();
+  } else if (kind === 'history') {
+    toggleHistoryPanel();
+  } else if (kind === 'cookie') {
+    toggleCookiePanel();
+  } else if (kind === 'account') {
+    toggleGoAccountMenu();
+  }
+}
+window.closeAllPanels = closeAllPanels;
+window.openSinglePanel = openSinglePanel;
+
 // ======= その他メニュー =======
 function toggleMoreOptions() {
-  document.getElementById('more-options-panel').classList.toggle('open');
+  const panel = document.getElementById('more-options-panel');
+  if (!panel) return;
+  const willOpen = !panel.classList.contains('open');
+  closeAllPanels();
+  if (willOpen) {
+    panel.classList.add('open');
+    _syncMobileScrim();
+  }
 }
 
 // ======= 拡張機能パネル（拡張機能ボタンで開閉） =======
 // パネルは拡張機能ボタンの真下に開く（ボタンの位置から毎回計算・下に入りきらない場合は真上）
 function toggleExtPanel() {
   const panel = document.getElementById('ext-panel');
-  const isOpen = panel.classList.toggle('open');
-  if (isOpen) positionExtPanel();
+  if (!panel) return;
+  const willOpen = !panel.classList.contains('open');
+  closeAllPanels();
+  if (willOpen) {
+    panel.classList.add('open');
+    positionExtPanel();
+    _syncMobileScrim();
+  }
 }
 function positionExtPanel() {
   const panel = document.getElementById('ext-panel');
@@ -1658,8 +1586,13 @@ function renderGoAccountUI() {
 function toggleGoAccountMenu() {
   const menu = document.getElementById('go-account-menu');
   if (!menu) return;
-  const isOpen = menu.style.display === 'block';
-  menu.style.display = isOpen ? 'none' : 'block';
+  const willOpen = menu.style.display !== 'block';
+  closeAllPanels();
+  if (willOpen) {
+    renderGoAccountUI();
+    menu.style.display = 'block';
+    _syncMobileScrim();
+  }
 }
 
 function doGoLogout() {
@@ -1911,8 +1844,14 @@ async function renderCookiePanel() {
 }
 function toggleCookiePanel() {
   const panel = document.getElementById('cookie-panel');
-  const open = panel.classList.toggle('open');
-  if (open) renderCookiePanel();
+  if (!panel) return;
+  const willOpen = !panel.classList.contains('open');
+  closeAllPanels();
+  if (willOpen) {
+    panel.classList.add('open');
+    _syncMobileScrim();
+    renderCookiePanel();
+  }
 }
 async function setCookieModeForSite(mode) {
   const host = _activeSiteHost();

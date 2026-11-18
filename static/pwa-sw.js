@@ -9,7 +9,7 @@
    下記の除外パスは厳守する。
 */
 
-const CACHE = "thecollapse-shell-v19";
+const CACHE = "thecollapse-shell-v21";
 
 // オフラインでも開けるよう最低限キャッシュするアプリシェル
 const SHELL = [

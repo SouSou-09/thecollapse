@@ -25,15 +25,23 @@ const readmePath = fileURLToPath(new URL("./readme.md", import.meta.url));
 // 上流が101を返さず「Remote did not upgrade the WebSocket」になる。
 // → `Upgrade` ヘッダー付きの要求だけ `Connection: Upgrade` を付与するエージェントを使う。
 // （IR V1 経由で Call of War 等のWebSocketゲームを動かすために必要）
+// さらに、YouTube / Google 等は Set-Cookie や Link ヘッダーで Node 既定の 16KB を超える応答ヘッダーを返し、
+// 「Parse Error: Header overflow」(bare server error 500) になる。→ 上流応答のヘッダー上限を引き上げる。
+//   ClientRequest#maxHeaderSize はソケット割り当て前（addRequest 時点）に設定すれば有効。
+const MAX_UPSTREAM_HEADER_SIZE = 1024 * 1024; // 1MB
+function prepareUpstreamRequest(req) {
+  try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
+  try { req.maxHeaderSize = MAX_UPSTREAM_HEADER_SIZE; } catch {}
+}
 class UpgradeHttpAgent extends HttpAgent {
   addRequest(req, opts) {
-    try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
+    prepareUpstreamRequest(req);
     return super.addRequest(req, opts);
   }
 }
 class UpgradeHttpsAgent extends HttpsAgent {
   addRequest(req, opts) {
-    try { if (req.getHeader("upgrade")) req.setHeader("connection", "Upgrade"); } catch {}
+    prepareUpstreamRequest(req);
     return super.addRequest(req, opts);
   }
 }
@@ -52,7 +60,7 @@ app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "no-referrer-when-downgrade");
   res.setHeader("X-XSS-Protection", "0"); // 古い XSS Auditor は無効化が推奨
-  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  res.setHeader("Permissions-Policy", "geolocation=(self), microphone=(self), camera=(self), fullscreen=*");
   // プロキシ機能の都合上、HSTS / CSP は強制しない（UV/Bare の動作を壊さないため）
   next();
 });
@@ -211,32 +219,61 @@ app.use("/ir1/", express.static(ir1CustomPath));
 app.use("/ir1/", express.static(uvPath));
 app.use("/baremux/", express.static(baremuxPath));
 
-// bare v2 のHTTPリクエストで x-bare-headers に host が無い場合はサーバー側で補完し、
-// また accept-encoding を gzip に固定する（express の app.use("/bare/", ...) は
-// server.on("request") で bare.shouldRoute(req) が先に分岐するため通らないことに注意）。
+// bare v2 / v3 のHTTPリクエストで x-bare-headers（分割された x-bare-headers-0, -1 ... 含む）に
+// host が無い場合はサーバー側で補完し、また accept-encoding を gzip, deflate に正規化する。
 // bare-serverは上流へ setHost:false で送信するため、hostが無いとHostヘッダー無しの
 // リクエストになり、Cloudflare配下のサイトが 400 Bad Request を返す。
-// またブラウザが br / zstd を要求すると DuckDuckGo 等で不正な圧縮応答や 202 空応答に
-// なることがあるため、gzip に統一してブラウザ側 fetch で確実に自動解凍させる。
+// またブラウザが br / zstd を要求すると一部サイトで圧縮解凍不整合になるため、
+// Node / ブラウザ双方で確実に扱える gzip, deflate に統一する。
 function prepareBareRequest(req) {
-  req.headers["accept-encoding"] = "gzip";
+  req.headers["accept-encoding"] = "gzip, deflate";
   try {
-    const xh = req.headers["x-bare-headers"];
-    const host = req.headers["x-bare-host"];
-    if (typeof xh !== "string" || typeof host !== "string" || !host) return;
-    const json = JSON.parse(xh);
+    let rawXh = req.headers["x-bare-headers"];
+    const splitKeys = [];
+    if (typeof rawXh !== "string") {
+      const parts = [];
+      for (const k of Object.keys(req.headers)) {
+        const m = /^x-bare-headers-(\d+)$/i.exec(k);
+        if (m) {
+          splitKeys.push(k);
+          const v = String(req.headers[k] || "");
+          parts[+m[1]] = v.startsWith(";") ? v.slice(1) : v;
+        }
+      }
+      if (parts.length) rawXh = parts.join("");
+    }
+    if (typeof rawXh !== "string" || !rawXh) return;
+    const json = JSON.parse(rawXh);
     if (!json || typeof json !== "object" || Array.isArray(json)) return;
+
     for (const k of Object.keys(json)) {
       if (k.toLowerCase() === "accept-encoding") delete json[k];
     }
-    json["accept-encoding"] = "gzip";
+    json["accept-encoding"] = "gzip, deflate";
+
     if (!Object.keys(json).some((k) => k.toLowerCase() === "host")) {
-      const proto = String(req.headers["x-bare-protocol"] || "");
-      const port = String(req.headers["x-bare-port"] || "");
-      const def = (proto === "https:" || proto === "wss:") ? "443" : "80";
-      json.host = port && port !== def ? `${host}:${port}` : host;
+      const xUrl = req.headers["x-bare-url"];
+      const host = req.headers["x-bare-host"];
+      if (typeof xUrl === "string" && xUrl) {
+        try { json.host = new URL(xUrl).host; } catch {}
+      } else if (typeof host === "string" && host) {
+        const proto = String(req.headers["x-bare-protocol"] || "");
+        const port = String(req.headers["x-bare-port"] || "");
+        const def = (proto === "https:" || proto === "wss:") ? "443" : "80";
+        json.host = port && port !== def ? `${host}:${port}` : host;
+      }
     }
-    req.headers["x-bare-headers"] = JSON.stringify(json);
+
+    const updated = JSON.stringify(json);
+    for (const k of splitKeys) delete req.headers[k];
+    delete req.headers["x-bare-headers"];
+    if (updated.length <= 3072) {
+      req.headers["x-bare-headers"] = updated;
+    } else {
+      for (let i = 0, n = 0; i < updated.length; i += 3072) {
+        req.headers[`x-bare-headers-${n++}`] = ";" + updated.slice(i, i + 3072);
+      }
+    }
   } catch {
     // 不正なJSONは bare-server 側のバリデーションに任せる
   }
@@ -353,11 +390,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal Server Error" });
 });
 
-const server = createServer();
+// ブラウザ → 本サーバー方向も、Cookie が多いサイトで x-bare-headers が巨大になるため上限を拡大
+const server = createServer({ maxHeaderSize: MAX_UPSTREAM_HEADER_SIZE });
 
 server.on("request", (req, res) => {
   if (bare.shouldRoute(req)) {
     prepareBareRequest(req);
+    // 【重要】bare は全リクエストが同一URL(/bare/v2/)で、宛先は x-bare-* ヘッダーだけで区別される。
+    // 応答に Cache-Control / Vary が無いとブラウザのHTTPキャッシュがURLだけで照合し、
+    // 別サイトの応答（最初に取得したHTMLなど）を全リクエストに使い回してしまう
+    // （YouTube のJSが全部同じHTMLになる / Call of War が読み込めない 原因）。
+    // → 必ずキャッシュ禁止にする。
+    const _origWriteHead = res.writeHead;
+    res.writeHead = function (...args) {
+      try {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Vary", "*");
+      } catch {}
+      return _origWriteHead.apply(this, args);
+    };
     bare.routeRequest(req, res);
   } else {
     app(req, res);
@@ -374,9 +426,10 @@ server.on("upgrade", (req, socket, head) => {
     try { socket.destroy(); } catch {}
     return;
   }
-  if (pathname === CHAT_WS_PATH) return; // chatserver.js が処理
+    if (pathname === CHAT_WS_PATH) return; // chatserver.js が処理
 
   if (bare.shouldRoute(req)) {
+    prepareBareRequest(req);
     bare.routeUpgrade(req, socket, head);
   } else {
     wisp.routeRequest(req, socket, head);
@@ -393,4 +446,5 @@ server.on("listening", () => {
 
 server.listen({
   port,
+  host: "0.0.0.0",
 });

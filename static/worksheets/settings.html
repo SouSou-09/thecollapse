@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>TheCollapse - Settings</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -316,6 +316,109 @@ nav {
   pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* ── スマートフォン向けレスポンシブ最適化 ── */
+@media (max-width: 768px) {
+  nav {
+    padding: env(safe-area-inset-top, 0px) 12px 0;
+    height: calc(52px + env(safe-area-inset-top, 0px));
+  }
+  .nav-logo { font-size: 15px; gap: 6px; }
+  .version-badge { font-size: 10px; padding: 1px 6px; }
+  .nav-right { gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .nav-right::-webkit-scrollbar { display: none; }
+  .nav-btn { padding: 6px 9px; font-size: 12.5px; gap: 4px; white-space: nowrap; }
+
+  .layout {
+    flex-direction: column;
+    margin-top: calc(52px + env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - 52px - env(safe-area-inset-top, 0px));
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    z-index: 50;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background-image: none;
+    background-color: rgba(14, 17, 23, 0.94);
+    backdrop-filter: blur(10px);
+  }
+  .sidebar::-webkit-scrollbar { display: none; }
+  .filter-wrap { display: none; }
+  .nav-item {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    gap: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .nav-item.active {
+    background: var(--active-bg);
+    border-color: #5b8fff;
+    color: #fff;
+  }
+
+  .content {
+    padding: 20px 16px calc(36px + env(safe-area-inset-bottom, 0px));
+  }
+  .section-title {
+    font-size: 19px;
+    margin-bottom: 14px;
+  }
+  .setting-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+    gap: 12px;
+  }
+  /* トグルスイッチ単体のカードだけは横並びを維持して押しやすくする */
+  .setting-card:has(> .toggle) {
+    flex-direction: row;
+    align-items: center;
+  }
+  .setting-control {
+    align-items: stretch;
+    width: 100%;
+  }
+  .styled-select,
+  .styled-input,
+  .filter-input {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px !important;
+    min-height: 42px;
+  }
+  .save-btn {
+    width: 100%;
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .toast {
+    left: 16px;
+    right: 16px;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    text-align: center;
+  }
+}
+@media (max-width: 400px) {
+  .version-badge { display: none; }
+  .nav-btn svg { display: none; }
+}
 </style>
 </head>
 <body>
