@@ -270,10 +270,46 @@ body.dt-open.ui-hidden #content-area { bottom: var(--dt-h); }
 }
 .dt-hl.label-below .dt-hl-label { bottom: auto; top: 100%; margin: 2px 0 0; }
 
-/* ── 狭い画面: 詳細パネルを下に積む ── */
+/* ── 狭い画面: 詳細パネルを下に積み、タッチ領域・16px入力・高さ上限を最適化 ── */
 @media (max-width: 640px) {
+  #dt-panel {
+    max-height: calc(100dvh - var(--bottom-bar-h, 56px) - var(--safe-bottom, 0px) - 48px);
+  }
+  .dt-resize {
+    height: 14px;
+  }
+  .dt-resize::after {
+    top: 5px;
+    width: 42px;
+    height: 4px;
+    margin-left: -21px;
+  }
+  .dt-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .dt-tab {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+  .dt-search {
+    height: 32px;
+  }
+  .dt-search input,
+  .dt-repl input,
+  .dt-modal textarea,
+  .dt-textedit {
+    font-size: 16px !important;
+  }
+  .dt-chip-btn {
+    padding: 5px 11px;
+    font-size: 12px;
+  }
   .dt-split { flex-direction: column; }
   .dt-detail { width: auto; max-width: none; height: 45%; border-left: none; border-top: 1px solid var(--border); }
   .dt-tree { flex: 1 1 55%; }
+  .dt-line { min-height: 24px; align-items: center; }
+  .dt-caret { width: 20px; height: 22px; }
+  .dt-dtab { padding: 8px 11px; font-size: 12px; }
   .dt-cat { display: none; }
 }

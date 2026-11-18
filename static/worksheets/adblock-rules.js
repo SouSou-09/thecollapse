@@ -39,21 +39,21 @@ var CSS_LIST = [
 ];
 // 既知の広告配信ドメイン（URL一致はJS側で復号して照合する）
 
-var DOMAINS = [
-  'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice', 'amazon-adsystem',
-  'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr', 'bidswitch', 'sharethrough',
-  '33across', 'criteo', 'taboola', 'outbrain', 'mgid', 'revcontent', 'propellerads',
-  'propellerclick', 'propellertracking', 'adsterra', 'exoclick', 'exdynsrv', 'magsrv',
-  'realsrv', 'hilltopads', 'popads', 'popcash', 'popmyads', 'trafficfactory', 'trafficjunky',
-  'trafficstars', 'tsyndicate', 'juicyads', 'plugrush', 'ero-advertising', 'eroadvertising',
-  'clickadu', 'zeropark', 'admaven', 'ad-maven', 'galaksion', 'adspyglass', 'adcash',
-  'aducdn', 'onclickads', 'onclckds', 'adsupply', 'adsco.re', 'evaadm', 'evadav',
-  'waframedia', 'smartadserver', 'openx.net', 'teads.tv', 'media.net', 'moatads',
-  'scorecardresearch', 'pubmatic', 'zedo', 'adcolony', 'applovin', 'vungle', 'inmobi',
-  'startapp', 'adskeeper', 'dditscdn', 'badoink', 'stripcash',
-  // 日本のまとめサイト系（裏広告 / 出会い系 / 広告リンク短縮）
-  'pcmax', 'happymail', 'wakuwaku', 'i2i.jp', 'zucks', 'adf.ly'
-];
+  var DOMAINS = [
+    'doubleclick.net', 'googlesyndication', 'googleadservices', 'adservice.google', 'amazon-adsystem',
+    'adnxs', 'adsafeprotected', 'adform', 'adroll', 'adsrvr.org', 'bidswitch', 'sharethrough',
+    '33across', 'criteo', 'taboola', 'outbrain', 'mgid.com', 'revcontent', 'propellerads',
+    'propellerclick', 'propellertracking', 'adsterra', 'exoclick', 'exdynsrv', 'magsrv',
+    'realsrv', 'hilltopads', 'popads', 'popcash', 'popmyads', 'trafficfactory', 'trafficjunky',
+    'trafficstars', 'tsyndicate', 'juicyads', 'plugrush', 'ero-advertising', 'eroadvertising',
+    'clickadu', 'zeropark', 'admaven', 'ad-maven', 'galaksion', 'adspyglass', 'adcash',
+    'aducdn', 'onclickads', 'onclckds', 'adsupply', 'adsco.re', 'evaadm', 'evadav',
+    'waframedia', 'smartadserver', 'openx.net', 'teads.tv', 'moatads',
+    'scorecardresearch', 'pubmatic', 'zedo.com', 'adcolony', 'applovin', 'vungle', 'inmobi',
+    'startappservice', 'adskeeper', 'dditscdn', 'badoink', 'stripcash',
+    // 日本のまとめサイト系（裏広告 / 出会い系 / 広告リンク短縮）
+    'pcmax.jp', 'happymail.co.jp', '550909.com', 'i2i.jp', 'zucks.net', 'adf.ly'
+  ];
 
   // ネットワーク遮断(SW)用: ホスト名の部分一致。JS側はURL全体も照合する。
   // パス根拠の広告（ホストは正規ドメインでも広告スクリプトと分かるもの）
