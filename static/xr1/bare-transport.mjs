@@ -247,7 +247,7 @@ export default class BareTransport {
 
   async init() {
     this.ready = true;
-    console.log('[xr1] bare-transport v13 loaded');
+    console.log('[xr1] bare-transport v15 loaded');
   }
 
   async request(remote, method, body, headers, signal) {

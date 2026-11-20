@@ -41,6 +41,24 @@
     } catch (e) { return null; }
   }
 
+  /* YouTube 系ページ（および YouTube 系ホスト宛て）の通信は遮断しない。
+     YouTube の再生スクリプトは googleads.g.doubleclick.net/pagead/id などを必ず取得し、
+     それが遮断(204 即応答)されると広告ブロックと判定して SABR 配信を絞る。
+     その結果、再生開始から約30秒でメディアデータが 107 バイトの空応答になり、
+     先読みバッファが尽きる 59〜60 秒で再生が止まる（全通信は 200 のまま）。
+     YouTube 自身の広告は SABR 配信内で来るため、ここで遮断する意味もない。 */
+  var YT_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|googlevideo\.com|ytimg\.com|ggpht\.com)$/i;
+  function isYoutubeHost(url) {
+    try { return YT_HOST_RE.test(new URL(String(url)).hostname); } catch (e) { return false; }
+  }
+  function fromYoutubePage(req, cfg) {
+    try {
+      var ref = req.referrer || '';
+      if (ref.indexOf(self.location.origin + cfg.prefix) !== 0) return false;
+      return isYoutubeHost(decodeTarget(ref, cfg));
+    } catch (e) { return false; }
+  }
+
   function blockedResponse(dest) {
     var h = { 'x-tc-adblock': 'blocked', 'cache-control': 'no-store' };
     switch (dest) {
@@ -84,7 +102,9 @@
       var isFrame = dest === 'iframe' || dest === 'frame' || dest === 'document';
       if (!isFrame || refInProxy) {
         var target = decodeTarget(req.url, cfg);
-        if (target && self.TC_AD_RULES.urlBlocked(target)) return blockedResponse(dest);
+        if (target && self.TC_AD_RULES.urlBlocked(target) && !isYoutubeHost(target) && !fromYoutubePage(req, cfg)) {
+          return blockedResponse(dest);
+        }
       }
     }
     var res = await run();
