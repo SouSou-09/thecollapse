@@ -761,8 +761,8 @@ function ensureProxyReady() {
     if (prefix === '/xr1-service/') {
       try {
         const { BareMuxConnection } = await import('/baremux/index.mjs');
-        const conn = new BareMuxConnection('/baremux/worker.js?v=13');
-        await conn.setTransport('/xr1/bare-transport.mjs?v=13', []);
+        const conn = new BareMuxConnection('/xr1/mux-worker.js?v=15');
+        await conn.setTransport('/xr1/bare-transport.mjs?v=15', []);
       } catch (e) { console.warn('[go] bare-mux init failed', e); }
     }
     const reg = await navigator.serviceWorker.register(engineSWUrl(), { scope: prefix });
