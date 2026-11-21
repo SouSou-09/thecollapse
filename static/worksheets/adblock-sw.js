@@ -109,7 +109,10 @@
     }
     var res = await run();
     try {
-      if (inProxy && (dest === 'document' || dest === 'iframe' || dest === 'frame') && res && res.status === 200 && isHtml(res)) {
+      // YouTube のページには非表示CSSを入れない。プレーヤー本体(#movie_player)に付く
+      // "ad-created" クラスが [class*=" ad-"] に一致し、映像欄ごと display:none になる。
+      if (inProxy && (dest === 'document' || dest === 'iframe' || dest === 'frame') && res && res.status === 200 && isHtml(res) &&
+          !isYoutubeHost(decodeTarget(req.url, cfg))) {
         var text = await res.text();
         var headers = new Headers(res.headers);
         headers.delete('content-length');

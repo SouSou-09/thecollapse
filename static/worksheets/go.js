@@ -1690,11 +1690,22 @@ function _adTeardown(frame) {
   } catch (e) {}
 }
 
+// YouTube のページでは非表示処理をしない。プレーヤー本体(#movie_player)に付く
+// "ad-created" クラスが [class*=" ad-"] に一致し、映像欄ごと display:none になる
+// （音だけ再生され、OS側の全画面でしか映像が見えない）。
+const AD_SKIP_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be)$/i;
+function _adSkipDoc(doc) {
+  try {
+    return AD_SKIP_HOST_RE.test(new URL(decodeProxyUrl(doc.location.href)).hostname);
+  } catch (e) { return false; }
+}
+
 function applyAdblock(frame) {
   if (!frame || !adblockEnabled()) return;
   try {
     const doc = frame.contentDocument;
     if (!doc || !doc.body) return;
+    if (_adSkipDoc(doc)) { _adTeardown(frame); return; }
     let st = doc.getElementById('tc-adblock-style');
     if (!st) {
       st = doc.createElement('style');
