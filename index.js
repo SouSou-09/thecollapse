@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { attachChatServer, CHAT_WS_PATH } from "./static/worksheets/chatserver.js";
 import { attachAuthRoutes, getSessionUser } from "./auth.js";
@@ -193,13 +194,47 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
+// WebKit(iPad/iPhone)は SW 本体のバイト列が同じだと、importScripts() 先だけが
+// 変わっても SW を入れ替えない（修正を配信しても端末に届かない）。
+// 取り込み先を含めたハッシュを本体末尾に付け、どれかが変われば本体も変わるようにする。
+// imports: ファイルパス、または内容を返す関数。
+async function sendServiceWorker(res, mainFile, imports) {
+  res.setHeader("Cache-Control", "no-cache");
+  try {
+    const main = await readFile(mainFile, "utf8");
+    const hash = createHash("sha1").update(main);
+    for (const src of imports) {
+      hash.update(typeof src === "function" ? await src() : await readFile(src));
+    }
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.send(`${main}\n// build:${hash.digest("hex").slice(0, 16)}\n`);
+  } catch (e) {
+    console.error("service worker stamp error:", e);
+    res.sendFile(mainFile);
+  }
+}
+
 // ⚠ express.static より前に置くこと。後ろだと static が先に /xr1/sw.js を返し、
 // Service-Worker-Allowed が付かず /xr1-service/ スコープで登録できない。
 app.get("/xr1/sw.js", (req, res) => {
   res.setHeader("Service-Worker-Allowed", "/xr1-service/");
-  res.setHeader("Cache-Control", "no-cache");
   // 広告ブロック対応のカスタムSW（標準の dist/sw.js に広告ブロックを追加したもの）
-  res.sendFile(xr1CustomPath + "sw.js");
+  sendServiceWorker(res, xr1CustomPath + "sw.js", [
+    getPatchedBundle,
+    xr1CustomPath + "xr.config.js",
+    join(uvPath, "uv.sw.js"),
+    join(publicPath, "worksheets/adblock-rules.js"),
+    join(publicPath, "worksheets/adblock-sw.js"),
+  ]);
+});
+app.get("/sw.js", (req, res) => {
+  sendServiceWorker(res, join(publicPath, "sw.js"), [
+    join(uv1Path, "uv.bundle.js"),
+    join(publicPath, "worksheets/uv/uv.config.js"),
+    join(uv1Path, "uv.sw.js"),
+    join(publicPath, "worksheets/adblock-rules.js"),
+    join(publicPath, "worksheets/adblock-sw.js"),
+  ]);
 });
 app.use(express.static(publicPath));
 app.use("/worksheets/uv/", express.static(uv1Path));

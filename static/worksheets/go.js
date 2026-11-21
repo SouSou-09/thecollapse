@@ -766,7 +766,9 @@ function ensureProxyReady() {
       } catch (e) { console.warn('[go] bare-mux init failed', e); }
     }
     const reg = await navigator.serviceWorker.register(engineSWUrl(), { scope: prefix });
+    const hadActive = !!reg.active;
     await _waitForSWActive(reg);
+    if (hadActive) await _updateSW(reg);
     if (reg.active && !navigator.serviceWorker.controller) {
       await new Promise(r => setTimeout(r, 120));
     }
@@ -776,6 +778,25 @@ function ensureProxyReady() {
   _proxyReady[prefix] = p;
   p.catch(() => { delete _proxyReady[prefix]; });
   return p;
+}
+
+// 登録済みの SW を最新にする。WebKit(iPad/iPhone)は register() の再呼び出しや
+// iframe 内のページ遷移では SW の更新を確認しないため、配信側で SW を直しても
+// 古い SW が動き続ける。明示的に更新を確認し、新しい SW が有効になるまで待つ。
+async function _updateSW(reg) {
+  try {
+    await Promise.race([reg.update(), new Promise(r => setTimeout(r, 4000))]);
+    const worker = reg.installing || reg.waiting;
+    if (!worker) return;
+    await new Promise(resolve => {
+      const check = () => {
+        if (worker.state === 'activated' || worker.state === 'redundant') resolve();
+      };
+      worker.addEventListener('statechange', check);
+      check();
+      setTimeout(resolve, 5000);
+    });
+  } catch (e) {}
 }
 
 // サービスワーカーが「有効(activated)」になるまで待つ。
