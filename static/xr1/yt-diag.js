@@ -135,32 +135,52 @@
     };
   }
 
-  async function watchVideoplayback(reqClone, res, remote) {
+  // 応答本体を複製(clone)せず、プレーヤーが読む流れをそのまま通しながら観察する。
+  // 複製すると、プレーヤーが読み込みを中止(シーク等)しても裏で最後まで受信し続けてしまう。
+  function watchVideoplayback(reqClone, res, remote) {
     var rn = (/[?&]rn=(\d+)/.exec(remote) || [])[1] || '?';
-    var line = 'videoplayback #' + rn + ' ' + res.status + ' ';
-    try { line += summarizeRequest(new Uint8Array(await reqClone.arrayBuffer())); } catch (e) { line += 'req ?'; }
-    try {
-      var ump = createUmpSummary();
-      var reader = res.body ? res.body.getReader() : { read: function () { return { done: true }; } };
-      for (;;) {
-        var r = await reader.read();
-        if (r.done) break;
-        ump.push(r.value);
-      }
-      line += ' | ' + ump.text();
-    } catch (e) { line += ' | res ? ' + String(e).slice(0, 60); }
-    post(line);
+    var head = reqClone.arrayBuffer().then(function (b) {
+      return summarizeRequest(new Uint8Array(b));
+    }).catch(function () { return 'req ?'; });
+    var ump = createUmpSummary(), reported = false;
+    function report(note) {
+      if (reported) return;
+      reported = true;
+      head.then(function (h) {
+        post('videoplayback #' + rn + ' ' + res.status + ' ' + h + ' | ' + ump.text() + (note ? ' ' + note : ''));
+      });
+    }
+    if (!res.body) { report(); return res; }
+    var reader = res.body.getReader();
+    var body = new ReadableStream({
+      pull: function (controller) {
+        return reader.read().then(function (r) {
+          if (r.done) { controller.close(); report(); return; }
+          try { ump.push(r.value); } catch (e) {}
+          controller.enqueue(r.value);
+        }, function (err) {
+          report('ERROR=' + String(err).slice(0, 60));
+          controller.error(err);
+        });
+      },
+      cancel: function (reason) {
+        report('CANCELLED');
+        return reader.cancel(reason);
+      },
+    });
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
   }
 
   self.TCYtDiag = {
     // 診断対象のリクエストなら、応答を渡すための関数を返す（対象外は null）。
+    // その関数が Response を返したら、元の応答の代わりにそれをページへ返すこと。
     // リクエスト本体は送信時に消費されるので、送信前に呼ぶこと。
     begin: function (request, remote) {
       try {
         if (request.method !== 'POST') return null;
         if (VP_RE.test(remote)) {
           var reqClone = request.clone();
-          return function (res) { watchVideoplayback(reqClone, res.clone(), remote); };
+          return function (res) { return watchVideoplayback(reqClone, res, remote); };
         }
         if (BG_RE.test(remote)) {
           return function (res) {

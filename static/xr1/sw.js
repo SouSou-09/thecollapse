@@ -399,12 +399,12 @@ async function handleRequest(event) {
     } catch (e) {}
     const dest = event.request.destination;
     const ytDiag = self.TCYtDiag.begin(event.request, remote);
-    const res = await self.TCAdblock.wrap(
+    let res = await self.TCAdblock.wrap(
       event,
       () => xr.fetch(event),
       { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl }
     );
-    if (ytDiag) { try { ytDiag(res); } catch (e) {} }
+    if (ytDiag) { try { res = ytDiag(res) || res; } catch (e) {} }
     return sanitizeFinalResponse(res, dest);
   }
 
