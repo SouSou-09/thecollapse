@@ -175,13 +175,23 @@ xr.on('beforemod', async (event) => {
       const uv = resCtx.ultraviolet;
       const rawSetCookie = resCtx.headers['set-cookie'];
       delete resCtx.headers['set-cookie'];
+      // UV はページへ注入する document.cookie の初期値を「リクエスト前に読んだ Cookie」から作るため、
+      // HTML 応答自身の Set-Cookie がそのページの document.cookie に入らない。注入用の直列化にも反映する。
+      if (typeof uv.cookie.withSetCookies === 'function') {
+        const serialize = uv.cookie.serialize;
+        uv.cookie.serialize = (cookies, meta, js) => {
+          let list = cookies;
+          try { list = uv.cookie.withSetCookies(cookies, rawSetCookie, uv.meta); } catch (_) {}
+          return serialize(list, meta, js);
+        };
+      }
       resCtx.__cookieCommitPromise = (async () => {
         try {
           const db = await uv.cookie.db();
           await uv.cookie.setCookies(rawSetCookie, db, uv.meta);
           const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
           for (const client of clients) {
-            try { client.postMessage({ msg: 'updateCookies', url: uv.meta.url.href }); } catch (_) {}
+            try { client.postMessage({ msg: 'updateCookies', url: uv.meta.url.href, setCookie: rawSetCookie }); } catch (_) {}
           }
         } catch (_) {}
       })();
