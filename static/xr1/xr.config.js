@@ -551,7 +551,22 @@
 
                     // G123 や各種 SPA が自サイト用の SW を登録しようとして SecurityError で落ちるのを防ぐ安全なスタブ
                     if (globalScope.navigator) {
-                        const fakeReady = new Promise(() => {});
+                        // ready は実物と同じく「登録されたら解決」する。未解決のままだと、
+                        // register().then(() => navigator.serviceWorker.ready) を待ってから起動するサイト
+                        // （雀魂のゲーム本体など）が永久に止まる。
+                        let resolveReady;
+                        const fakeReady = new Promise((resolve) => { resolveReady = resolve; });
+                        const makeFakeWorker = (scriptURL) => {
+                            const worker = new EventTarget();
+                            Object.defineProperties(worker, {
+                                scriptURL: { value: scriptURL, enumerable: true },
+                                state: { value: 'activated', enumerable: true },
+                                postMessage: { value: () => {}, enumerable: true },
+                                onstatechange: { get: () => null, set: () => {}, enumerable: true },
+                                onerror: { get: () => null, set: () => {}, enumerable: true },
+                            });
+                            return worker;
+                        };
                         // ⚠ Object.create(EventTarget.prototype) は本物の EventTarget ではないため、
                         //    addEventListener を呼ぶと「Illegal invocation」になる（G123 の Workbox が
                         //    navigator.serviceWorker.addEventListener('message', ...) で即死していた）。
@@ -561,16 +576,22 @@
                             controller: { get: () => null, enumerable: true },
                             ready: { get: () => fakeReady, enumerable: true },
                             register: {
-                                value: () => Promise.resolve({
-                                    scope: __uv.location ? __uv.location.origin + '/' : '/',
-                                    active: null,
-                                    installing: null,
-                                    waiting: null,
-                                    update: () => Promise.resolve(),
-                                    unregister: () => Promise.resolve(true),
-                                    addEventListener: () => {},
-                                    removeEventListener: () => {},
-                                }),
+                                value: (scriptURL) => {
+                                    let resolved = '';
+                                    try { resolved = new URL(String(scriptURL), __uv.location.href).href; } catch (_) {}
+                                    const registration = {
+                                        scope: __uv.location ? __uv.location.origin + '/' : '/',
+                                        active: makeFakeWorker(resolved),
+                                        installing: null,
+                                        waiting: null,
+                                        update: () => Promise.resolve(),
+                                        unregister: () => Promise.resolve(true),
+                                        addEventListener: () => {},
+                                        removeEventListener: () => {},
+                                    };
+                                    resolveReady(registration);
+                                    return Promise.resolve(registration);
+                                },
                                 enumerable: true,
                             },
                             getRegistration: { value: () => Promise.resolve(undefined), enumerable: true },
