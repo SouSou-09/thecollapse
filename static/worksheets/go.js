@@ -1775,6 +1775,15 @@ if (navigator.serviceWorker) {
   navigator.serviceWorker.addEventListener('message', (e) => {
     const d = e.data;
     if (d && d.msg === 'tcYtDiag' && typeof addLog === 'function') addLog(`[YT診断 sw:${d.build || '?'}] ${d.text}`);
+    // YouTube の再生方式が切り替わったら、開いている YouTube のタブを読み込み直して反映する（理由は xr1/yt-fallback.js 参照）
+    if (d && d.msg === 'tcYtFallback') {
+      document.querySelectorAll('iframe.browser-frame').forEach(f => {
+        try {
+          const host = new URL(decodeProxyUrl(f.contentWindow.location.href)).hostname;
+          if (/(^|\.)(youtube\.com|youtube-nocookie\.com)$/i.test(host)) f.contentWindow.location.reload();
+        } catch {}
+      });
+    }
   });
 }
 window.syncAdblockToSW = syncAdblockToSW;

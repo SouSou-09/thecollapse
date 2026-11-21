@@ -228,6 +228,7 @@ app.get("/xr1/sw.js", (req, res) => {
     join(publicPath, "worksheets/adblock-sw.js"),
     xr1CustomPath + "yt-diag.js",
     xr1CustomPath + "yt-pot.js",
+    xr1CustomPath + "yt-fallback.js",
   ]);
 });
 // YouTube の再生トークンをサーバー側で発行する（理由は yt-pot.js 参照）。XR V1 の SW が呼ぶ。
