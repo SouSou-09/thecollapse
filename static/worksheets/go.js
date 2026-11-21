@@ -1768,6 +1768,15 @@ function syncAdblockToSW() {
     regs.forEach(r => { const w = r.active || r.waiting || r.installing; if (w) { try { w.postMessage(msg); } catch (e) {} } });
   }).catch(() => {});
 }
+
+// YouTube 再生診断（/xr1/yt-diag.js）: プロキシの Service Worker が要約した
+// 動画データの要求・応答をアプリ内ログに出す。build は動作中の SW の版。
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.msg === 'tcYtDiag' && typeof addLog === 'function') addLog(`[YT診断 sw:${d.build || '?'}] ${d.text}`);
+  });
+}
 window.syncAdblockToSW = syncAdblockToSW;
 
 function toggleAdblock() {
