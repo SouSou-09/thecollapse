@@ -293,28 +293,6 @@
             }
         };
 
-        // 4) Cookie ドメイン検証バグ修正
-        const fixedValidateCookie = function (cookie, meta, js = false) {
-            if (!cookie || !meta || !meta.url) return false;
-            if (cookie.httpOnly && !!js) return false;
-            const host = String(meta.url.hostname || '').toLowerCase();
-            const rawDom = String(cookie.domain || '').toLowerCase();
-            const dom = rawDom.startsWith('.') ? rawDom.slice(1) : rawDom;
-            if (!host || !dom) return false;
-            if (rawDom.startsWith('.')) {
-                if (host !== dom && !host.endsWith('.' + dom)) return false;
-            } else {
-                if (host !== dom) return false;
-            }
-            if (cookie.secure && meta.url.protocol === 'http:') return false;
-            const cPath = cookie.path || '/';
-            const reqPath = meta.url.pathname || '/';
-            if (cPath !== '/' && reqPath !== cPath && !reqPath.startsWith(cPath.endsWith('/') ? cPath : cPath + '/')) {
-                return false;
-            }
-            return true;
-        };
-
         // 5) Ultraviolet インスタンス生成時のミドルウェア拡張:
         //    - <script type="application/ld+json"> / importmap / speculationrules / template 等の非JSスクリプトを壊さない
         //    - <meta http-equiv="refresh" content="0;url=..."> の自動リダイレクト先もプロキシ化する
@@ -323,10 +301,6 @@
         UV.prototype.implementUVMiddleware = function () {
             const res = origImplement.apply(this, arguments);
             try {
-                if (this.cookie) {
-                    this.cookie.validateCookie = fixedValidateCookie;
-                }
-
                 // HTML <script> の type チェックを差し替え（JSON-LD 等を JS として再構築しない）
                 const htmlTextListeners = this.html.listeners('text');
                 this.html.removeAllListeners('text');
@@ -412,6 +386,79 @@
         };
     }
 
+    // ── Cookie ジャーの不具合修正 ──
+    // UV 標準の Cookie 処理には次の不具合があり、インスタンスごとに差し替える
+    // （`this.cookie` はコンストラクタの最後で代入されるので、prototype 側からは差し替えられない）。
+    // - 送信可否の判定が `hostname.endsWith("x.com")` で、ドット境界を見ない（x.com の Cookie が
+    //   netflix.com 等にも送られる）うえ、Path を見ない。
+    // - `Max-Age=0`（Expires 無し）の削除指示が無視され、値が空の Cookie が残り続ける。
+    function cookieMatches(cookie, meta, js = false) {
+        if (!cookie || !meta || !meta.url) return false;
+        if (cookie.httpOnly && !!js) return false;
+        const host = String(meta.url.hostname || '').toLowerCase();
+        const dom = String(cookie.domain || '').toLowerCase().replace(/^\./, '');
+        if (!host || !dom) return false;
+        if (host !== dom && !host.endsWith('.' + dom)) return false;
+        if (cookie.secure && meta.url.protocol === 'http:') return false;
+        const cPath = cookie.path || '/';
+        const reqPath = meta.url.pathname || '/';
+        if (cPath !== '/' && reqPath !== cPath && !reqPath.startsWith(cPath.endsWith('/') ? cPath : cPath + '/')) {
+            return false;
+        }
+        return true;
+    }
+
+    function cookieExpired(cookie, now) {
+        if (typeof cookie.maxAge === 'number' && !isNaN(cookie.maxAge)) {
+            if (cookie.maxAge <= 0) return true;
+            const setAt = cookie.set ? new Date(cookie.set).getTime() : NaN;
+            return !isNaN(setAt) && setAt + cookie.maxAge * 1000 <= now;
+        }
+        if (cookie.expires) {
+            const at = new Date(cookie.expires).getTime();
+            return !isNaN(at) && at <= now;
+        }
+        return false;
+    }
+
+    function patchCookieJar(uv) {
+        const jar = uv && uv.cookie;
+        if (!jar || jar.__xr1Patched) return;
+        jar.__xr1Patched = true;
+        jar.validateCookie = cookieMatches;
+        jar.serialize = (cookies = [], meta, js) => {
+            let out = '';
+            for (const cookie of cookies) {
+                if (!cookieMatches(cookie, meta, js)) continue;
+                out += (out ? '; ' : '') + cookie.name + '=' + cookie.value;
+            }
+            return out;
+        };
+        jar.getCookies = async (db) => {
+            const now = Date.now();
+            return (await db.getAll('cookies')).filter((cookie) => {
+                if (!cookieExpired(cookie, now)) return true;
+                db.delete('cookies', cookie.id);
+                return false;
+            });
+        };
+        // Set-Cookie ヘッダーを、DB へ書く時と同じ規則で Cookie 一覧へ反映した新しい一覧を返す
+        jar.withSetCookies = (cookies, setCookieHeader, meta) => {
+            const byId = new Map((cookies || []).map((c) => [c.id, c]));
+            const now = Date.now();
+            for (const c of jar.setCookie(setCookieHeader, { decodeValues: false })) {
+                if (!c.domain) c.domain = '.' + meta.url.hostname;
+                if (!c.path) c.path = '/';
+                if (!c.domain.startsWith('.')) c.domain = '.' + c.domain;
+                c.id = `${c.domain}@${c.path}@${c.name}`;
+                c.set = new Date(now);
+                if (cookieExpired(c, now)) byId.delete(c.id);
+                else byId.set(c.id, c);
+            }
+            return Array.from(byId.values());
+        };
+    }
+
     // ── クライアント側（window および Web Worker 共通）追加パッチ ──
     function patchRuntimeEnvironment(globalScope) {
         if (!globalScope || globalScope.__xr1EnvPatched) return;
@@ -420,6 +467,13 @@
         globalScope.__xr1EnvPatched = true;
 
         const isWindow = typeof globalScope.window !== 'undefined' && !!globalScope.document;
+
+        // UV の handler は起動時に Navigator.prototype.serviceWorker を削除する。この config は handler より
+        // 先に読み込まれるので、Service Worker からの通知を受けるために実物をここで確保しておく。
+        let realSWContainer = null;
+        try {
+            if (isWindow && globalScope.navigator) realSWContainer = globalScope.navigator.serviceWorker || null;
+        } catch (e) {}
 
         // 0) Proxy の ownKeys トラップが返すキー配列の重複を除去する。
         //    G123 の qiankun サンドボックスは `Es(keys)` で `this[k] = true` を使って重複排除するが、
@@ -535,20 +589,6 @@
             // 2) window 専用パッチ（navigator.serviceWorker スタブ、window.open、document.cookie 同期）
             if (isWindow) {
                 try {
-                    const realSW = globalScope.navigator && globalScope.navigator.serviceWorker;
-                    // SW からの updateCookies メッセージを受け取って document.cookie を即時同期する
-                    // （偽装前に実物の serviceWorker コンテナへリスナーを登録しておく）
-                    if (realSW && EventTarget.prototype.addEventListener) {
-                        EventTarget.prototype.addEventListener.call(realSW, 'message', (ev) => {
-                            const d = ev && ev.data;
-                            if (d && d.msg === 'updateCookies' && __uv.cookie) {
-                                __uv.cookie.db().then((db) => __uv.cookie.getCookies(db)).then((cookies) => {
-                                    __uv.__latestCookieStr = __uv.cookie.serialize(cookies, __uv.meta, true);
-                                }).catch(() => {});
-                            }
-                        });
-                    }
-
                     // G123 や各種 SPA が自サイト用の SW を登録しようとして SecurityError で落ちるのを防ぐ安全なスタブ
                     if (globalScope.navigator) {
                         // ready は実物と同じく「登録されたら解決」する。未解決のままだと、
@@ -608,55 +648,72 @@
                     }
                 } catch (e) {}
 
-                // document.cookie の getter を補強し、SW の Set-Cookie 反映分（__latestCookieStr）も即座に読めるようにする
+                // document.cookie を Cookie DB と同期する。
+                // UV は document.cookie の値をページ読み込み時の文字列で持ち続け、その後に fetch / XHR などの
+                // 応答の Set-Cookie で変わった分を反映しない。そのため「応答で更新された Cookie を読んで
+                // ヘッダーに載せる」サイト（X の ct0 → x-csrf-token など）で、ヘッダーと実際に送られる Cookie が
+                // 食い違う。Service Worker からの updateCookies 通知と JS からの書き込みのたびに DB から読み直す。
                 try {
                     const docProto = globalScope.Document && globalScope.Document.prototype;
-                    const htmlDocProto = globalScope.HTMLDocument && globalScope.HTMLDocument.prototype;
-                    for (const proto of [docProto, htmlDocProto]) {
-                        if (!proto) continue;
-                        const desc = Object.getOwnPropertyDescriptor(proto, 'cookie');
-                        if (desc && typeof desc.get === 'function' && typeof desc.set === 'function' && !desc.get.__xr1CookieWrapped) {
-                            const origGet = desc.get;
-                            const origSet = desc.set;
-                            const wrappedGet = function () {
-                                const base = origGet.call(this) || '';
-                                const latest = __uv.__latestCookieStr;
-                                if (!latest) return base;
-                                if (!base) return latest;
-                                // 両者をマージ（latest 優先 + JS で直前に set された base も保持）
-                                const map = new Map();
-                                for (const part of base.split(';')) {
-                                    const s = part.trim();
-                                    if (!s) continue;
-                                    const eq = s.indexOf('=');
-                                    if (eq > 0) map.set(s.slice(0, eq), s.slice(eq + 1));
-                                }
-                                for (const part of latest.split(';')) {
-                                    const s = part.trim();
-                                    if (!s) continue;
-                                    const eq = s.indexOf('=');
-                                    if (eq > 0) map.set(s.slice(0, eq), s.slice(eq + 1));
-                                }
-                                return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
-                            };
-                            wrappedGet.__xr1CookieWrapped = true;
-                            const wrappedSet = function (v) {
-                                const r = origSet.call(this, v);
-                                // JS 側で document.cookie に書き込まれたら __latestCookieStr も再計算予約
-                                if (__uv.cookie) {
-                                    __uv.cookie.db().then((db) => __uv.cookie.getCookies(db)).then((cookies) => {
-                                        __uv.__latestCookieStr = __uv.cookie.serialize(cookies, __uv.meta, true);
-                                    }).catch(() => {});
-                                }
-                                return r;
-                            };
-                            Object.defineProperty(proto, 'cookie', {
-                                get: wrappedGet,
-                                set: wrappedSet,
-                                configurable: true,
-                                enumerable: true,
+                    const desc = docProto && Object.getOwnPropertyDescriptor(docProto, 'cookie');
+                    if (desc && typeof desc.get === 'function' && typeof desc.set === 'function' && !desc.get.__xr1CookieWrapped && __uv.cookie) {
+                        patchCookieJar(__uv);
+                        const origGet = desc.get;
+                        const origSet = desc.set;
+                        const doc = globalScope.document;
+                        let cookieView = origGet.call(doc) || '';
+                        let refreshSeq = 0;
+                        const refreshCookieView = () => {
+                            const seq = ++refreshSeq;
+                            __uv.cookie.db().then((db) => __uv.cookie.getCookies(db)).then((cookies) => {
+                                // 途中で新しい読み直しが始まっていたら、古い結果で上書きしない
+                                if (seq === refreshSeq) cookieView = __uv.cookie.serialize(cookies, __uv.meta, true);
+                            }).catch(() => {});
+                        };
+                        // DB の読み直し（非同期）を待たずに読めるよう、書き込まれた Cookie を手元の値にも即時反映する
+                        const applyToCookieView = (setCookie, host) => {
+                            for (const cookie of __uv.cookie.setCookie(setCookie, { decodeValues: false })) {
+                                if (!cookie || !cookie.name) continue;
+                                if (!cookie.path) cookie.path = '/';
+                                if (!cookie.domain) cookie.domain = host;
+                                if (!cookieMatches(cookie, __uv.meta, true)) continue;
+                                const parts = cookieView ? cookieView.split('; ').filter((c) => !c.startsWith(cookie.name + '=')) : [];
+                                if (!cookieExpired(cookie, Date.now())) parts.push(cookie.name + '=' + cookie.value);
+                                cookieView = parts.join('; ');
+                            }
+                        };
+                        const wrappedGet = function () {
+                            return this === doc ? cookieView : origGet.call(this);
+                        };
+                        wrappedGet.__xr1CookieWrapped = true;
+                        const wrappedSet = function (v) {
+                            const r = origSet.call(this, v);
+                            if (this === doc) {
+                                try { applyToCookieView(String(v), __uv.meta.url.hostname); } catch (e) {}
+                                refreshCookieView();
+                            }
+                            return r;
+                        };
+                        Object.defineProperty(docProto, 'cookie', {
+                            get: wrappedGet,
+                            set: wrappedSet,
+                            configurable: true,
+                            enumerable: true,
+                        });
+                        if (realSWContainer) {
+                            EventTarget.prototype.addEventListener.call(realSWContainer, 'message', (ev) => {
+                                const d = ev && ev.data;
+                                if (!d || d.msg !== 'updateCookies') return;
+                                try {
+                                    if (d.setCookie) applyToCookieView(d.setCookie, new URL(d.url).hostname);
+                                } catch (e) {}
+                                refreshCookieView();
                             });
+                            // 通知はページの読み込み完了まで保留されるので、すぐ受け取れるようにする
+                            try { realSWContainer.startMessages(); } catch (e) {}
                         }
+                        // 注入された初期値の後に変わった分（並行して届いた応答の Set-Cookie）を取り込む
+                        refreshCookieView();
                     }
                 } catch (e) {}
 
@@ -753,6 +810,7 @@
             try {
                 if (uv && uv.constructor) patchUltravioletClass(uv.constructor);
             } catch (e) {}
+            try { patchCookieJar(uv); } catch (e) {}
         },
     };
 
