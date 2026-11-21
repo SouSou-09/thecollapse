@@ -19,21 +19,32 @@ let minter = null; // { mint, expiresAt, close }
 let pending = null;
 const cache = new Map(); // videoId -> { token, minter }
 
+// 判定を実行する jsdom と同じブラウザを名乗る
 function fetchWithTimeout(url, init) {
-  return fetch(url, { ...init, signal: AbortSignal.timeout(INIT_TIMEOUT_MS) });
+  return fetch(url, {
+    ...init,
+    headers: { ...init?.headers, "user-agent": USER_AGENT },
+    signal: AbortSignal.timeout(INIT_TIMEOUT_MS),
+  });
 }
 
 async function createMinter() {
-  const [{ JSDOM }, { getChallenge, BotGuardClient }, { buildURL, getHeaders }] = await Promise.all([
+  const [{ JSDOM, ResourceLoader }, { getChallenge, BotGuardClient }, { buildURL, getHeaders }] = await Promise.all([
     import("jsdom"),
     import("bgutils-js/botguard"),
     import("bgutils-js/utils"),
   ]);
 
+  // navigator.userAgent は ResourceLoader 経由でしか変えられない。外部リソースは読み込ませない。
+  class NoFetchLoader extends ResourceLoader {
+    fetch() {
+      return null;
+    }
+  }
   const dom = new JSDOM('<!DOCTYPE html><html lang="en"><head><title></title></head><body></body></html>', {
     url: "https://www.youtube.com/",
     referrer: "https://www.youtube.com/",
-    userAgent: USER_AGENT,
+    resources: new NoFetchLoader({ userAgent: USER_AGENT }),
     runScripts: "outside-only",
   });
   const win = dom.window;
