@@ -62,7 +62,9 @@
       var end = (first(r, 2) || 0) + (first(r, 3) || 0);
       if (bufEnd === null || end > bufEnd) bufEnd = end;
     });
-    return 'req ' + buf.length + 'B po=' + (po instanceof Uint8Array ? po.length : 'none') +
+    // トークンの種類は先頭バイトで分かる: 0x22=仮トークン(cold start) / 0x32=BotGuard で発行した正規トークン
+    var kind = !(po instanceof Uint8Array) || !po.length ? '' : po[0] === 0x22 ? ':cold' : po[0] === 0x32 ? ':mint' : ':x' + po[0].toString(16);
+    return 'req ' + buf.length + 'B po=' + (po instanceof Uint8Array ? po.length : 'none') + kind +
       ' t=' + sec(first(sub(f, 1), 28)) + ' buf=' + sec(bufEnd);
   }
 
@@ -137,10 +139,10 @@
 
   // 応答本体を複製(clone)せず、プレーヤーが読む流れをそのまま通しながら観察する。
   // 複製すると、プレーヤーが読み込みを中止(シーク等)しても裏で最後まで受信し続けてしまう。
-  function watchVideoplayback(reqClone, res, remote) {
+  function watchVideoplayback(reqClone, res, remote, note) {
     var rn = (/[?&]rn=(\d+)/.exec(remote) || [])[1] || '?';
     var head = reqClone.arrayBuffer().then(function (b) {
-      return summarizeRequest(new Uint8Array(b));
+      return summarizeRequest(new Uint8Array(b)) + (note ? ' ' + note : '');
     }).catch(function () { return 'req ?'; });
     var ump = createUmpSummary(), reported = false;
     function report(note) {
@@ -174,13 +176,13 @@
   self.TCYtDiag = {
     // 診断対象のリクエストなら、応答を渡すための関数を返す（対象外は null）。
     // その関数が Response を返したら、元の応答の代わりにそれをページへ返すこと。
-    // リクエスト本体は送信時に消費されるので、送信前に呼ぶこと。
-    begin: function (request, remote) {
+    // リクエスト本体は送信時に消費されるので、送信前に呼ぶこと。note は要求の要約に添える文字列（任意）。
+    begin: function (request, remote, note) {
       try {
         if (request.method !== 'POST') return null;
         if (VP_RE.test(remote)) {
           var reqClone = request.clone();
-          return function (res) { return watchVideoplayback(reqClone, res, remote); };
+          return function (res) { return watchVideoplayback(reqClone, res, remote, note); };
         }
         if (BG_RE.test(remote)) {
           return function (res) {

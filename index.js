@@ -13,6 +13,7 @@ import { join, resolve, dirname } from "node:path";
 import { attachChatServer, CHAT_WS_PATH } from "./static/worksheets/chatserver.js";
 import { attachAuthRoutes, getSessionUser } from "./auth.js";
 import { attachSnsRoutes } from "./sns.js";
+import { mintYoutubePoToken } from "./yt-pot.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
 // v1（現行エンジン）のdist退避先と、XR V1用カスタムconfigの場所
@@ -226,7 +227,20 @@ app.get("/xr1/sw.js", (req, res) => {
     join(publicPath, "worksheets/adblock-rules.js"),
     join(publicPath, "worksheets/adblock-sw.js"),
     xr1CustomPath + "yt-diag.js",
+    xr1CustomPath + "yt-pot.js",
   ]);
+});
+// YouTube の再生トークンをサーバー側で発行する（理由は yt-pot.js 参照）。XR V1 の SW が呼ぶ。
+app.get("/xr1/yt-pot", createRateLimit(), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const videoId = String(req.query.v || "");
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: "bad video id" });
+  try {
+    res.json({ token: await mintYoutubePoToken(videoId) });
+  } catch (e) {
+    console.error("yt-pot error:", e?.message || e);
+    res.status(503).json({ error: "token unavailable" });
+  }
 });
 app.get("/sw.js", (req, res) => {
   sendServiceWorker(res, join(publicPath, "sw.js"), [
@@ -346,37 +360,40 @@ function prepareBareRequest(req) {
   }
 }
 
-/* ── 簡易レートリミッタ (PUT /worksheets/data/:filename) ── */
-// 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の書き込み回数を制限する。
-const _rlBucket = new Map(); // ip -> { count, resetAt }
+/* ── 簡易レートリミッタ ── */
+// 外部依存を増やさず、IP ごとのスライディングウィンドウで毎分の回数を制限する。
+// 呼び出しごとに別のバケットを持つ（用途の違うエンドポイントが互いの枠を使い切らないように）。
 const RL_WINDOW_MS = 60_000;
 const RL_MAX = 60; // 1 分あたり 60 回まで
-function rateLimit(req, res, next) {
-  const ip =
-    (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim() ||
-    req.socket.remoteAddress ||
-    "unknown";
-  const now = Date.now();
-  const cur = _rlBucket.get(ip);
-  if (!cur || cur.resetAt < now) {
-    _rlBucket.set(ip, { count: 1, resetAt: now + RL_WINDOW_MS });
-    return next();
-  }
-  cur.count += 1;
-  if (cur.count > RL_MAX) {
-    res.setHeader("Retry-After", Math.ceil((cur.resetAt - now) / 1000));
-    return res.status(429).json({ error: "Too Many Requests" });
-  }
-  next();
+function createRateLimit() {
+  const bucket = new Map(); // ip -> { count, resetAt }
+  // バケットの肥大化防止
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of bucket) if (v.resetAt < now) bucket.delete(k);
+  }, 5 * 60_000).unref?.();
+  return function rateLimit(req, res, next) {
+    const ip =
+      (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim() ||
+      req.socket.remoteAddress ||
+      "unknown";
+    const now = Date.now();
+    const cur = bucket.get(ip);
+    if (!cur || cur.resetAt < now) {
+      bucket.set(ip, { count: 1, resetAt: now + RL_WINDOW_MS });
+      return next();
+    }
+    cur.count += 1;
+    if (cur.count > RL_MAX) {
+      res.setHeader("Retry-After", Math.ceil((cur.resetAt - now) / 1000));
+      return res.status(429).json({ error: "Too Many Requests" });
+    }
+    next();
+  };
 }
-// バケットの肥大化防止
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of _rlBucket) if (v.resetAt < now) _rlBucket.delete(k);
-}, 5 * 60_000).unref?.();
 
 // ユーザーデータファイルの書き込みエンドポイント
-app.put("/worksheets/data/:filename", rateLimit, async (req, res) => {
+app.put("/worksheets/data/:filename", createRateLimit(), async (req, res) => {
   try {
     const filename = req.params.filename;
     // ディレクトリトラバーサル対策

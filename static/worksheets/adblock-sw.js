@@ -51,11 +51,18 @@
   function isYoutubeHost(url) {
     try { return YT_HOST_RE.test(new URL(String(url)).hostname); } catch (e) { return false; }
   }
-  function fromYoutubePage(req, cfg) {
+  function isYoutubePageUrl(url, cfg) {
     try {
-      var ref = req.referrer || '';
-      if (ref.indexOf(self.location.origin + cfg.prefix) !== 0) return false;
-      return isYoutubeHost(decodeTarget(ref, cfg));
+      if (!url || url.indexOf(self.location.origin + cfg.prefix) !== 0) return false;
+      return isYoutubeHost(decodeTarget(url, cfg));
+    } catch (e) { return false; }
+  }
+  // リファラが付かない要求（実機の iPad で確認）は、要求元ページの URL で判定する
+  async function fromYoutubePage(event, cfg) {
+    if (isYoutubePageUrl(event.request.referrer, cfg)) return true;
+    try {
+      var client = event.clientId ? await self.clients.get(event.clientId) : null;
+      return !!client && isYoutubePageUrl(client.url, cfg);
     } catch (e) { return false; }
   }
 
@@ -102,7 +109,7 @@
       var isFrame = dest === 'iframe' || dest === 'frame' || dest === 'document';
       if (!isFrame || refInProxy) {
         var target = decodeTarget(req.url, cfg);
-        if (target && self.TC_AD_RULES.urlBlocked(target) && !isYoutubeHost(target) && !fromYoutubePage(req, cfg)) {
+        if (target && self.TC_AD_RULES.urlBlocked(target) && !isYoutubeHost(target) && !(await fromYoutubePage(event, cfg))) {
           return blockedResponse(dest);
         }
       }

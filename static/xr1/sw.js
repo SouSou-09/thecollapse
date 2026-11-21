@@ -6,6 +6,7 @@ importScripts(__uv$config.sw || '/xr1/xr.sw.js');
 importScripts('/worksheets/adblock-rules.js');
 importScripts('/worksheets/adblock-sw.js');
 importScripts('/xr1/yt-diag.js');
+importScripts('/xr1/yt-pot.js');
 
 const xr = new UVServiceWorker();
 
@@ -398,10 +399,20 @@ async function handleRequest(event) {
       }
     } catch (e) {}
     const dest = event.request.destination;
-    const ytDiag = self.TCYtDiag.begin(event.request, remote);
+    // YouTube: 動画データの要求に入っている再生トークンを、サーバー発行のものへ載せ替える（理由は yt-pot.js 参照）
+    let proxied = event;
+    let potNote = '';
+    try {
+      const pot = await self.TCYtPot.prepare(event, remote);
+      if (pot) {
+        potNote = pot.note;
+        if (pot.request) proxied = { request: pot.request };
+      }
+    } catch (e) {}
+    const ytDiag = self.TCYtDiag.begin(proxied.request, remote, potNote);
     let res = await self.TCAdblock.wrap(
-      event,
-      () => xr.fetch(event),
+      proxied,
+      () => xr.fetch(proxied),
       { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl }
     );
     if (ytDiag) { try { res = ytDiag(res) || res; } catch (e) {} }
