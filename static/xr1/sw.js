@@ -258,6 +258,28 @@ xr.on('response', (event) => {
   } catch (e) {}
 });
 
+const IMA_SDK_RE = /^https?:\/\/imasdk\.googleapis\.com\/js\/sdkloader\//i;
+const NICO_HOST_RE = /(^|\.)nicovideo\.jp$/i;
+
+// リクエストを出したページ（プロキシ先）のホスト名。分からなければ空文字。
+async function requestPageHost(event) {
+  const base = self.location.origin + __uv$config.prefix;
+  const hostOf = (url) => {
+    try {
+      if (!url || url.indexOf(base) !== 0) return '';
+      return new URL(__uv$config.decodeUrl(url.slice(base.length).split('#')[0])).hostname;
+    } catch (e) {
+      return '';
+    }
+  };
+  try {
+    const client = event.clientId ? await self.clients.get(event.clientId) : null;
+    const host = hostOf(client && client.url);
+    if (host) return host;
+  } catch (e) {}
+  return hostOf(event.request.referrer);
+}
+
 function sanitizeFinalResponse(res, dest) {
   if (!res || !res.headers) return res;
   const isDoc = dest === 'document' || dest === 'iframe' || dest === 'frame';
@@ -362,10 +384,11 @@ async function handleRequest(event) {
           headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' },
         });
       }
-      // Google IMA SDK（動画広告）はプロキシ配下では広告を再生できず、完了・失敗の通知も返さない。
-      // そのためプレロール広告の終了を待つプレーヤー（ニコニコ動画など）が、本編を再生しないまま止まる。
+      // ニコニコ動画: Google IMA SDK（動画広告）はプロキシ配下では広告を再生できず、完了・失敗の通知も返さない。
+      // そのためプレロール広告の終了を待つプレーヤーが、本編を再生しないまま止まる。
       // SDK 本体を空スクリプトにして「広告なし」として本編へ進ませる（広告ブロックの ON/OFF に依存させない）。
-      if (/^https?:\/\/imasdk\.googleapis\.com\/js\/sdkloader\//i.test(remote)) {
+      // `google.ima` 未定義を想定していないサイトを壊さないよう、動作確認済みのニコニコ動画のページに限定する。
+      if (IMA_SDK_RE.test(remote) && NICO_HOST_RE.test(await requestPageHost(event))) {
         return new Response('/* TheCollapse: IMA SDK disabled (video ads cannot play through the proxy) */', {
           status: 200,
           headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' },
