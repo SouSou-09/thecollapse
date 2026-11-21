@@ -34,6 +34,76 @@ const STRIP_SEC_RESPONSE_HEADERS = [
 
 const JS_MIME_RE = /^(application\/(javascript|x-javascript|ecmascript)|text\/(javascript|ecmascript|jscript|js))\b/i;
 
+// ── YouTube BotGuard（attestation）対策 ──
+// YouTube は BotGuard チャレンジを実行して得た integrity token から再生用の PO トークンを作る。
+// チャレンジ発行（Create）とトークン発行（GenerateIT）は、リクエストの Origin / Referer と、チャレンジを実際に
+// 実行したページのオリジンとの一致を検証する。プロキシ配下ではヘッダーが youtube.com、実行オリジンがプロキシに
+// なるため検証に落ち、`GenerateIT` がフォールバックトークンしか返さない。正規の PO トークンが無いと動画サーバーは
+// 先頭 60 秒分しか配信せず、エラーも出ないまま 59〜60 秒で再生が止まる。対策として:
+//  1. Create / GenerateIT から Origin / Referer を外す（オリジンに束縛されないチャレンジになる）
+//  2. HTML に `window.ytAtN({'R': '<att/get 応答 JSON>'})` で埋め込まれた発行済みチャレンジ
+//     （bgChallenge。youtube.com に束縛済み）を除去
+//  3. 埋め込みチャレンジ前提の共有インスタンス（html5_use_shared_owl_instance）を無効化し、
+//     プレーヤー自身に 1. の Create を呼ばせる
+const YT_ATT_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com)$/i;
+const YT_ATT_LITERAL_RE = /(ytAtN\(\s*\{\s*'R'\s*:\s*')((?:[^'\\]|\\[\s\S])*)(')/;
+const YT_BG_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com|googleapis\.com)$/i;
+const YT_BG_PATH_RE = /\/(api\/jnn\/v1|\$rpc\/google\.internal\.waa\.v1\.Waa)\/(Create|GenerateIT)$/;
+const YT_SHARED_BG_FLAG_RE = /(html5_use_shared_owl_instance(?:=|%3D|\\u003d|\\x3d))true/gi;
+
+function decodeJsStringLiteral(lit) {
+  return lit.replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|[\s\S])/g, (m, esc) => {
+    if (esc[0] === 'x' || esc[0] === 'u') {
+      return esc.length > 1 ? String.fromCharCode(parseInt(esc.slice(1), 16)) : esc;
+    }
+    switch (esc) {
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      case 'b': return '\b';
+      case 'f': return '\f';
+      case 'v': return '\v';
+      case '0': return '\0';
+      default: return esc;
+    }
+  });
+}
+
+function encodeJsStringLiteral(str) {
+  return str.replace(/[^A-Za-z0-9 _.,:;!?*+@#$%^()~\-]/g, (ch) => {
+    const code = ch.charCodeAt(0);
+    return code < 0x100
+      ? '\\x' + code.toString(16).padStart(2, '0')
+      : '\\u' + code.toString(16).padStart(4, '0');
+  });
+}
+
+function stripYtBgChallengeFromJson(text) {
+  try {
+    if (text.indexOf('bgChallenge') === -1) return text;
+    const data = JSON.parse(text);
+    if (!data || typeof data !== 'object' || !data.bgChallenge) return text;
+    delete data.bgChallenge;
+    return JSON.stringify(data);
+  } catch (e) {
+    return text;
+  }
+}
+
+function patchYtBotGuardHtml(html) {
+  try {
+    html = html.replace(YT_SHARED_BG_FLAG_RE, '$1false');
+    if (html.indexOf('ytAtN') === -1 || html.indexOf('bgChallenge') === -1) return html;
+    return html.replace(YT_ATT_LITERAL_RE, (m, head, lit, tail) => {
+      const json = decodeJsStringLiteral(lit);
+      const stripped = stripYtBgChallengeFromJson(json);
+      return stripped === json ? m : head + encodeJsStringLiteral(stripped) + tail;
+    });
+  } catch (e) {
+    return html;
+  }
+}
+
 // ── 1) リクエスト送信前フック（request） ──
 xr.on('request', (event) => {
   try {
@@ -64,6 +134,12 @@ xr.on('request', (event) => {
       } catch (e) {
         h.origin = targetUrl.origin;
       }
+    }
+
+    // YouTube BotGuard: Create / GenerateIT には Origin / Referer を付けない（理由は上の「YouTube BotGuard 対策」参照）
+    if (method === 'POST' && YT_BG_HOST_RE.test(targetUrl.hostname) && YT_BG_PATH_RE.test(targetUrl.pathname)) {
+      delete h.origin;
+      delete h.referer;
     }
 
     if (!h['accept-language'] && navigator.language) {
@@ -111,6 +187,14 @@ xr.on('beforemod', async (event) => {
     if (resCtx.status === 202 && /text\/html/i.test(ct) && (dest === 'document' || dest === 'iframe' || dest === 'frame')) {
       resCtx.status = 200;
       resCtx.statusText = 'OK';
+    }
+
+    // YouTube: ページ埋め込みの BotGuard チャレンジを除去（理由は上の「YouTube BotGuard 対策」参照）
+    if (/text\/html/i.test(ct) && (dest === 'document' || dest === 'iframe' || dest === 'frame') &&
+        YT_ATT_HOST_RE.test(targetUrl.hostname) && resCtx.raw && typeof resCtx.raw.text === 'function') {
+      const raw = resCtx.raw;
+      const origText = raw.text.bind(raw);
+      raw.text = async () => patchYtBotGuardHtml(await origText());
     }
 
     const isJsPath = /\.(m?js|cjs)(\?|$)/i.test(targetUrl.pathname);
@@ -276,6 +360,15 @@ async function handleRequest(event) {
         return new Response('/* TheCollapse: web-animations polyfill disabled (native Web Animations used) */', {
           status: 200,
           headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' },
+        });
+      }
+      // Google IMA SDK（動画広告）はプロキシ配下では広告を再生できず、完了・失敗の通知も返さない。
+      // そのためプレロール広告の終了を待つプレーヤー（ニコニコ動画など）が、本編を再生しないまま止まる。
+      // SDK 本体を空スクリプトにして「広告なし」として本編へ進ませる（広告ブロックの ON/OFF に依存させない）。
+      if (/^https?:\/\/imasdk\.googleapis\.com\/js\/sdkloader\//i.test(remote)) {
+        return new Response('/* TheCollapse: IMA SDK disabled (video ads cannot play through the proxy) */', {
+          status: 200,
+          headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' },
         });
       }
     } catch (e) {}
