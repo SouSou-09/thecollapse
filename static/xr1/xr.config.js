@@ -224,6 +224,10 @@
         // 2) rewriteUrl の二重エンコード防止 & 安全化
         UV.prototype.rewriteUrl = function (str, meta = this.meta) {
             if (str == null) return str;
+            // 別 realm（iframe 等）で作られた Request は UV の `instanceof Request` 判定をすり抜けてここへ来る。
+            // 文字列化すると "[object Request]" という URL になってしまうため、Request のまま返す
+            // （fetch / new Request はどちらも別 realm の Request をそのまま受け取れる）。
+            if (typeof str === 'object' && Object.prototype.toString.call(str) === '[object Request]') return str;
             str = String(str).trim();
             if (!str || PASS_THROUGH_SCHEMES.test(str)) return str;
 
