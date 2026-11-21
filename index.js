@@ -13,6 +13,7 @@ import { join, resolve, dirname } from "node:path";
 import { attachChatServer, CHAT_WS_PATH } from "./static/worksheets/chatserver.js";
 import { attachAuthRoutes, getSessionUser } from "./auth.js";
 import { attachSnsRoutes } from "./sns.js";
+import { mintYoutubePoToken } from "./yt-pot.js";
 
 const publicPath = fileURLToPath(new URL("./static/", import.meta.url));
 // v1（現行エンジン）のdist退避先と、XR V1用カスタムconfigの場所
@@ -226,7 +227,20 @@ app.get("/xr1/sw.js", (req, res) => {
     join(publicPath, "worksheets/adblock-rules.js"),
     join(publicPath, "worksheets/adblock-sw.js"),
     xr1CustomPath + "yt-diag.js",
+    xr1CustomPath + "yt-pot.js",
   ]);
+});
+// YouTube の再生トークンをサーバー側で発行する（理由は yt-pot.js 参照）。XR V1 の SW が呼ぶ。
+app.get("/xr1/yt-pot", rateLimit, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const videoId = String(req.query.v || "");
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: "bad video id" });
+  try {
+    res.json({ token: await mintYoutubePoToken(videoId) });
+  } catch (e) {
+    console.error("yt-pot error:", e?.message || e);
+    res.status(503).json({ error: "token unavailable" });
+  }
 });
 app.get("/sw.js", (req, res) => {
   sendServiceWorker(res, join(publicPath, "sw.js"), [
