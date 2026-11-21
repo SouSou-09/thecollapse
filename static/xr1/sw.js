@@ -7,6 +7,7 @@ importScripts('/worksheets/adblock-rules.js');
 importScripts('/worksheets/adblock-sw.js');
 importScripts('/xr1/yt-diag.js');
 importScripts('/xr1/yt-pot.js');
+importScripts('/xr1/yt-fallback.js');
 
 const xr = new UVServiceWorker();
 
@@ -196,7 +197,16 @@ xr.on('beforemod', async (event) => {
         YT_ATT_HOST_RE.test(targetUrl.hostname) && resCtx.raw && typeof resCtx.raw.text === 'function') {
       const raw = resCtx.raw;
       const origText = raw.text.bind(raw);
-      raw.text = async () => patchYtBotGuardHtml(await origText());
+      raw.text = async () => {
+        let html = patchYtBotGuardHtml(await origText());
+        // 再生トークンの証明が拒否される環境では、MSE を使わない再生に切り替える（理由は yt-fallback.js 参照）
+        try {
+          if (self.TCYtFallback.isMobileHost(targetUrl.hostname) && await self.TCYtFallback.active()) {
+            html = self.TCYtFallback.patchHtml(html);
+          }
+        } catch (e) {}
+        return html;
+      };
     }
 
     const isJsPath = /\.(m?js|cjs)(\?|$)/i.test(targetUrl.pathname);
@@ -386,6 +396,12 @@ async function handleRequest(event) {
           status: 200,
           headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' },
         });
+      }
+      // YouTube: MSE を使わない再生が失敗したというページからの知らせ（理由は yt-fallback.js 参照）
+      if (self.TCYtFallback.isFailSignal(remote)) {
+        const code = (/[?&]code=(\d+)/.exec(remote) || [])[1] || '?';
+        await self.TCYtFallback.fail('video error ' + code);
+        return new Response(null, { status: 204 });
       }
       // ニコニコ動画: Google IMA SDK（動画広告）はプロキシ配下では広告を再生できず、完了・失敗の通知も返さない。
       // そのためプレロール広告の終了を待つプレーヤーが、本編を再生しないまま止まる。

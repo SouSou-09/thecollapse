@@ -8,6 +8,8 @@
   var VP_RE = /^https:\/\/[^/]*\.googlevideo\.com\/videoplayback\?/i;
   var BG_RE = /\/(api\/jnn\/v1|\$rpc\/google\.internal\.waa\.v1\.Waa)\/GenerateIT(\?|$)/;
   var PLAYER_RE = /^https:\/\/[^/]*\.youtube(-nocookie)?\.com\/youtubei\/v1\/player(\?|$)/i;
+  var fileCount = 0;
+  var MWEB_RE = /[?&]c=MWEB(&|$)/;
   var MAX_PART = 8192; // これより大きいパートは中身を読まない
 
   function post(text) {
@@ -71,7 +73,7 @@
   // 応答(UMP): パートの種類、配信可否(STREAM_PROTECTION_STATUS)、待ち時間、エラー、届いた動画の終端
   function createUmpSummary() {
     var pending = new Uint8Array(0), skip = 0, total = 0, media = 0, mediaEnd = null;
-    var types = {}, notes = [];
+    var types = {}, notes = [], sps = 0;
 
     function varintAt(p) {
       if (p >= pending.length) return null;
@@ -87,7 +89,7 @@
     }
     function part(type, payload) {
       var f = pb(payload);
-      if (type === 58) notes.push('SPS=' + first(f, 1));
+      if (type === 58) { var st = first(f, 1); notes.push('SPS=' + st); if (st > sps) sps = st; }
       else if (type === 35) { var b = first(f, 4); if (b) notes.push('backoff=' + b); }
       else if (type === 44) notes.push('SABR_ERROR=' + String.fromCharCode.apply(null, payload.subarray(0, 60)).replace(/[^\x20-\x7e]/g, '.'));
       else if (type === 43) notes.push('REDIRECT');
@@ -130,6 +132,8 @@
         }
         pending = pending.slice(p);
       },
+      // 配信可否の通知(STREAM_PROTECTION_STATUS)の最大値: 1=可 / 2=証明待ち / 3=証明が必要(配信停止)
+      sps: function () { return sps; },
       text: function () {
         return 'res ' + total + 'B media=' + media + 'B' + (mediaEnd !== null ? '(→' + sec(mediaEnd) + 's)' : '') +
           (notes.length ? ' ' + notes.join(' ') : '') + ' parts=' + Object.keys(types).join(',');
@@ -150,6 +154,10 @@
       reported = true;
       head.then(function (h) {
         post('videoplayback #' + rn + ' ' + res.status + ' ' + h + ' | ' + ump.text() + (note ? ' ' + note : ''));
+        // 正規トークンを送っても「証明待ち」のまま、または配信停止になったら、再生方式を切り替える
+        var st = ump.sps();
+        // （モバイル版のプレーヤーのみ。PC 版は通常ファイルを持たない動画があり、切り替えると再生できなくなる）
+        if (MWEB_RE.test(remote) && (st >= 3 || (st === 2 && /po=\d+:mint/.test(h)))) self.TCYtFallback.trip();
       });
     }
     if (!res.body) { report(); return res; }
@@ -174,11 +182,23 @@
   }
 
   self.TCYtDiag = {
+    log: post,
     // 診断対象のリクエストなら、応答を渡すための関数を返す（対象外は null）。
     // その関数が Response を返したら、元の応答の代わりにそれをページへ返すこと。
     // リクエスト本体は送信時に消費されるので、送信前に呼ぶこと。note は要求の要約に添える文字列（任意）。
     begin: function (request, remote, note) {
       try {
+        if (request.method === 'GET' && VP_RE.test(remote)) {
+          // MSE を使わない再生（通常ファイル）。要求が多いので、成功は最初の数件だけ出す
+          var range = request.headers.get('range') || '-';
+          var itag = (/[?&]itag=(\d+)/.exec(remote) || [])[1] || '?';
+          return function (res) {
+            if (res.status >= 400) self.TCYtFallback.fail('HTTP ' + res.status);
+            if (++fileCount > 6 && res.status < 400) return;
+            post('videoplayback file itag=' + itag + ' range=' + range + ' → ' + res.status + ' ' +
+              (res.headers.get('content-range') || res.headers.get('content-length') || '-'));
+          };
+        }
         if (request.method !== 'POST') return null;
         if (VP_RE.test(remote)) {
           var reqClone = request.clone();
