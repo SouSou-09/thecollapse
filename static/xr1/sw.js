@@ -5,6 +5,7 @@ importScripts('/xr1/xr.config.js');
 importScripts(__uv$config.sw || '/xr1/xr.sw.js');
 importScripts('/worksheets/adblock-rules.js');
 importScripts('/worksheets/adblock-sw.js');
+importScripts('/xr1/yt-diag.js');
 
 const xr = new UVServiceWorker();
 
@@ -376,8 +377,9 @@ async function handleRequest(event) {
     // YouTube が読み込む Web Animations ポリフィルはプロキシ内で
     // 「Cannot read properties of null (reading 'cancel')」を連発して描画を止める。
     // モダンブラウザは標準対応なので、ポリフィルだけ空スクリプトに差し替える。
+    let remote = '';
     try {
-      const remote = __uv$config.decodeUrl(event.request.url.slice((self.location.origin + __uv$config.prefix).length));
+      remote = __uv$config.decodeUrl(event.request.url.slice((self.location.origin + __uv$config.prefix).length));
       if (/\/web-animations-next(-lite)?(\.min)?[^/]*\.js(\?|$)/i.test(remote) || /web-animations-next-lite\.min\.js/i.test(remote)) {
         return new Response('/* TheCollapse: web-animations polyfill disabled (native Web Animations used) */', {
           status: 200,
@@ -396,11 +398,13 @@ async function handleRequest(event) {
       }
     } catch (e) {}
     const dest = event.request.destination;
-    const res = await self.TCAdblock.wrap(
+    const ytDiag = self.TCYtDiag.begin(event.request, remote);
+    let res = await self.TCAdblock.wrap(
       event,
       () => xr.fetch(event),
       { prefix: __uv$config.prefix, decodeUrl: __uv$config.decodeUrl }
     );
+    if (ytDiag) { try { res = ytDiag(res) || res; } catch (e) {} }
     return sanitizeFinalResponse(res, dest);
   }
 

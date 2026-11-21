@@ -207,7 +207,7 @@ async function sendServiceWorker(res, mainFile, imports) {
       hash.update(typeof src === "function" ? await src() : await readFile(src));
     }
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-    res.send(`${main}\n// build:${hash.digest("hex").slice(0, 16)}\n`);
+    res.send(`${main}\nself.__tcSwBuild = "${hash.digest("hex").slice(0, 16)}";\n`);
   } catch (e) {
     console.error("service worker stamp error:", e);
     res.sendFile(mainFile);
@@ -225,6 +225,7 @@ app.get("/xr1/sw.js", (req, res) => {
     join(uvPath, "uv.sw.js"),
     join(publicPath, "worksheets/adblock-rules.js"),
     join(publicPath, "worksheets/adblock-sw.js"),
+    xr1CustomPath + "yt-diag.js",
   ]);
 });
 app.get("/sw.js", (req, res) => {
