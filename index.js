@@ -263,13 +263,21 @@ app.use("/uv/", express.static(uv1Path));
 // (PropertyDefinition) のキーを除外しないため、`class A { location; }` が
 // `class A { __uv.$get(location); }` に書き換えられ SyntaxError になる
 // (Call of War のログイン後ゲーム本体 model.*.js が読み込めず真っ白になる原因)。
+// 同じ理由で、ラベル（`top: do { ... } while (...)`、`break top`、`continue top`）や、
+// 宣言の位置にある識別子（`catch (top)`、`import top from`、`(class top {})`、`const [top] = x`）も
+// `__uv.$get(top)` に書き換えられ SyntaxError になる（X のログイン画面が開けない原因）。
 // node_modules は直接編集できないため、配信時にバンドルへパッチを当てる。
 let patchedBundleCache = null;
 async function getPatchedBundle() {
   if (patchedBundleCache) return patchedBundleCache;
   const src = await readFile(join(uvPath, "uv.bundle.js"), "utf8");
   const needle = 'a.type==="MethodDefinition"||a.type==="ClassDeclaration"';
-  const repl = 'a.type==="MethodDefinition"||a.type==="PropertyDefinition"&&a.key===r&&!a.computed||a.type==="ClassDeclaration"';
+  const repl =
+    'a.type==="MethodDefinition"||a.type==="PropertyDefinition"&&a.key===r&&!a.computed' +
+    '||a.type==="LabeledStatement"||a.type==="BreakStatement"||a.type==="ContinueStatement"' +
+    '||a.type==="CatchClause"&&a.param===r||a.type==="ClassExpression"&&a.id===r' +
+    '||a.type==="ImportDefaultSpecifier"||a.type==="ImportNamespaceSpecifier"||a.type==="ArrayPattern"' +
+    '||a.type==="ClassDeclaration"';
   if (!src.includes(needle)) {
     console.warn("[xr1] UV bundle patch target not found (UV updated?). Serving unpatched bundle.");
     patchedBundleCache = src;
